@@ -101,6 +101,12 @@ def init_db():
         c.execute("ALTER TABLE users ADD COLUMN billing_rate REAL DEFAULT 0.0")
         c.execute("UPDATE users SET billing_rate = hourly_rate WHERE billing_rate = 0.0 OR billing_rate IS NULL")
 
+    # Ensure media column exists in shifts table for existing databases
+    c.execute("PRAGMA table_info(shifts)")
+    shift_cols = [col[1] for col in c.fetchall()]
+    if 'media' not in shift_cols:
+        c.execute("ALTER TABLE shifts ADD COLUMN media TEXT DEFAULT ''")
+
     # Shifts Table
     c.execute('''
         CREATE TABLE IF NOT EXISTS shifts (
@@ -536,7 +542,7 @@ def sync_crew_data():
     # Fetch shifts
     shifts = [dict(r) for r in db.execute("""
         SELECT id, worker_id as workerId, date, start_time as startTime, end_time as endTime, 
-               break_minutes as breakMinutes, total_hours as totalHours, status, approved_by as approvedBy, note
+               break_minutes as breakMinutes, total_hours as totalHours, status, approved_by as approvedBy, note, media
         FROM shifts WHERE crew_id = ? ORDER BY date DESC, id DESC
     """, (crew_id,)).fetchall()]
 
@@ -628,18 +634,33 @@ def stop_timer():
     data = request.json or {}
     worker_id = data.get('worker_id')
     date_str = data.get('date')
-    start_time_str = round_time_to_30_minutes(data.get('start_time'))
-    end_time_str = round_time_to_30_minutes(data.get('end_time'))
+    round_time = data.get('round_time', True)
+    if round_time:
+        start_time_str = round_time_to_30_minutes(data.get('start_time'))
+        end_time_str = round_time_to_30_minutes(data.get('end_time'))
+    else:
+        start_time_str = str(data.get('start_time', '08:00')).strip()
+        end_time_str = str(data.get('end_time', '17:00')).strip()
+
     break_mins = int(data.get('break_minutes', 0))
     total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time_str, end_time_str, break_mins)
     note = data.get('note', 'Shift logged from live timer')
+    media = data.get('media', '')
 
     db = get_db()
+    # Double entry prevention
+    dup = db.execute("""
+        SELECT id FROM shifts 
+        WHERE crew_id = ? AND worker_id = ? AND date = ? AND start_time = ? AND end_time = ?
+    """, (g.user['crew_id'], worker_id, date_str, start_time_str, end_time_str)).fetchone()
+    if dup:
+        return jsonify({"error": "Doppelte Schicht: Für diesen Arbeiter existiert bereits eine Schicht zu dieser Zeit."}), 400
+
     shift_id = "s_" + uuid.uuid4().hex[:10]
     db.execute("""
-        INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    """, (shift_id, g.user['crew_id'], worker_id, date_str, start_time_str, end_time_str, break_mins, total_hours, note, int(time.time())))
+        INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, media, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+    """, (shift_id, g.user['crew_id'], worker_id, date_str, start_time_str, end_time_str, break_mins, total_hours, note, media, int(time.time())))
     
     db.execute("DELETE FROM timers WHERE worker_id = ?", (worker_id,))
     db.commit()
@@ -649,52 +670,113 @@ def stop_timer():
 @login_required
 def add_manual_shift():
     data = request.json or {}
-    worker_id = data.get('worker_id')
+    worker_ids = data.get('worker_ids') or ([data.get('worker_id')] if data.get('worker_id') else [])
     date_str = data.get('date')
-    start_time = round_time_to_30_minutes(data.get('start_time'))
-    end_time = round_time_to_30_minutes(data.get('end_time'))
+    round_time = data.get('round_time', True)
+    if round_time:
+        start_time = round_time_to_30_minutes(data.get('start_time'))
+        end_time = round_time_to_30_minutes(data.get('end_time'))
+    else:
+        start_time = str(data.get('start_time', '08:00')).strip()
+        end_time = str(data.get('end_time', '16:30')).strip()
+
     break_mins = int(data.get('break_minutes', 0))
     total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time, end_time, break_mins)
     note = data.get('note', '')
+    media = data.get('media', '')
 
     db = get_db()
-    shift_id = "s_" + uuid.uuid4().hex[:10]
-    db.execute("""
-        INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    """, (shift_id, g.user['crew_id'], worker_id, date_str, start_time, end_time, break_mins, total_hours, note, int(time.time())))
+    shift_ids = []
+    for worker_id in worker_ids:
+        # Check duplicate
+        dup = db.execute("""
+            SELECT id FROM shifts 
+            WHERE crew_id = ? AND worker_id = ? AND date = ? AND start_time = ? AND end_time = ?
+        """, (g.user['crew_id'], worker_id, date_str, start_time, end_time)).fetchone()
+        if dup:
+            continue
+
+        shift_id = "s_" + uuid.uuid4().hex[:10]
+        db.execute("""
+            INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, media, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+        """, (shift_id, g.user['crew_id'], worker_id, date_str, start_time, end_time, break_mins, total_hours, note, media, int(time.time())))
+        shift_ids.append(shift_id)
+
     db.commit()
-    return jsonify({"success": True, "shift_id": shift_id})
+    if not shift_ids:
+        return jsonify({"error": "Für alle gewählten Mitarbeiter existieren bereits Schichten zu dieser Zeit."}), 400
+    return jsonify({"success": True, "shift_ids": shift_ids, "shift_id": shift_ids[0]})
+
+@app.route('/api/shifts/<shift_id>', methods=['PUT'])
+@login_required
+def edit_shift(shift_id):
+    if g.user['role'] != 'leader':
+        return jsonify({"error": "Only leaders can edit shifts"}), 403
+
+    data = request.json or {}
+    worker_id = data.get('worker_id') or data.get('workerId')
+    date_str = data.get('date')
+    start_time = data.get('start_time') or data.get('startTime')
+    end_time = data.get('end_time') or data.get('endTime')
+    break_mins = int(data.get('break_minutes', data.get('breakMinutes', 0)))
+    total_hours = float(data.get('total_hours', data.get('totalHours', 0.0))) or calculate_shift_hours(start_time, end_time, break_mins)
+    note = data.get('note', '')
+    media = data.get('media', '')
+    status = data.get('status', 'pending')
+
+    db = get_db()
+    db.execute("""
+        UPDATE shifts 
+        SET worker_id = ?, date = ?, start_time = ?, end_time = ?, break_minutes = ?, 
+            total_hours = ?, note = ?, media = ?, status = ?, updated_at = ?
+        WHERE id = ? AND crew_id = ?
+    """, (worker_id, date_str, start_time, end_time, break_mins, total_hours, note, media, status, int(time.time()), shift_id, g.user['crew_id']))
+    db.commit()
+    return jsonify({"success": True})
+
+@app.route('/api/shifts/<shift_id>', methods=['DELETE'])
+@login_required
+def delete_shift(shift_id):
+    if g.user['role'] != 'leader':
+        return jsonify({"error": "Only leaders can delete shifts"}), 403
+
+    db = get_db()
+    db.execute("DELETE FROM shifts WHERE id = ? AND crew_id = ?", (shift_id, g.user['crew_id']))
+    db.commit()
+    return jsonify({"success": True})
 
 @app.route('/api/shifts/<shift_id>/status', methods=['PUT'])
 @login_required
 def update_shift_status(shift_id):
-    if g.user['role'] != 'supervisor':
-        return jsonify({"error": "Only supervisors can approve or reject shifts"}), 403
+    if g.user['role'] not in ['supervisor', 'leader']:
+        return jsonify({"error": "Only supervisors or leaders can update shift status"}), 403
 
     status = request.json.get('status')
     if status not in ['approved', 'rejected']:
         return jsonify({"error": "Invalid status"}), 400
 
+    approver = 'Supervisor' if g.user['role'] == 'supervisor' else 'Leader'
     db = get_db()
     db.execute("""
-        UPDATE shifts SET status = ?, approved_by = 'Supervisor', updated_at = ?
+        UPDATE shifts SET status = ?, approved_by = ?, updated_at = ?
         WHERE id = ? AND crew_id = ?
-    """, (status, int(time.time()), shift_id, g.user['crew_id']))
+    """, (status, approver, int(time.time()), shift_id, g.user['crew_id']))
     db.commit()
     return jsonify({"success": True})
 
 @app.route('/api/shifts/approve-all', methods=['POST'])
 @login_required
 def approve_all_shifts():
-    if g.user['role'] != 'supervisor':
-        return jsonify({"error": "Only supervisors can approve shifts"}), 403
+    if g.user['role'] not in ['supervisor', 'leader']:
+        return jsonify({"error": "Only supervisors or leaders can approve shifts"}), 403
 
+    approver = 'Supervisor' if g.user['role'] == 'supervisor' else 'Leader'
     db = get_db()
     db.execute("""
-        UPDATE shifts SET status = 'approved', approved_by = 'Supervisor', updated_at = ?
+        UPDATE shifts SET status = 'approved', approved_by = ?, updated_at = ?
         WHERE crew_id = ? AND status = 'pending'
-    """, (int(time.time()), g.user['crew_id']))
+    """, (approver, int(time.time()), g.user['crew_id']))
     db.commit()
     return jsonify({"success": True})
 
@@ -702,26 +784,38 @@ def approve_all_shifts():
 @login_required
 def log_payment():
     data = request.json or {}
-    worker_id = data.get('worker_id')
+    worker_id = data.get('worker_id') or data.get('workerId')
     amount = float(data.get('amount', 0.0))
     date_str = data.get('date')
-    received_by = data.get('received_by', '')
+    received_by = data.get('received_by') or data.get('receivedBy', '')
     comment = data.get('comment', '')
+    status = data.get('status', 'pending')
+
+    if amount <= 0:
+        return jsonify({"error": "Betrag muss größer als 0 sein."}), 400
 
     db = get_db()
+    # Double payment check
+    dup = db.execute("""
+        SELECT id FROM payments 
+        WHERE crew_id = ? AND worker_id = ? AND date = ? AND amount = ? AND status = 'pending'
+    """, (g.user['crew_id'], worker_id, date_str, amount)).fetchone()
+    if dup:
+        return jsonify({"error": "Eine ausstehende Zahlung mit demselben Betrag existiert bereits für diesen Arbeiter an diesem Tag."}), 400
+
     payment_id = "p_" + uuid.uuid4().hex[:10]
     db.execute("""
         INSERT INTO payments (id, crew_id, worker_id, amount, date, received_by, logged_by, comment, status, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-    """, (payment_id, g.user['crew_id'], worker_id, amount, date_str, received_by, g.user['role'].capitalize(), comment, int(time.time())))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (payment_id, g.user['crew_id'], worker_id, amount, date_str, received_by, g.user['role'].capitalize(), comment, status, int(time.time())))
     db.commit()
     return jsonify({"success": True, "payment_id": payment_id})
 
 @app.route('/api/payments/<payment_id>/status', methods=['PUT'])
 @login_required
 def update_payment_status(payment_id):
-    if g.user['role'] != 'supervisor':
-        return jsonify({"error": "Only supervisors can approve or reject payments"}), 403
+    if g.user['role'] not in ['supervisor', 'leader']:
+        return jsonify({"error": "Only supervisors or leaders can approve or reject payments"}), 403
 
     status = request.json.get('status')
     if status not in ['approved', 'rejected']:

@@ -341,14 +341,30 @@ function handleLocalApi(endpoint, method, body) {
 
   if (cleanEndpoint === '/api/timers/stop' && method === 'POST') {
     const shiftId = 's_' + Date.now();
-    const startTime = roundTimeTo30Minutes(body.start_time);
-    const endTime = roundTimeTo30Minutes(body.end_time);
+    const roundTime = body.round_time !== false;
+    const startTime = roundTime ? roundTimeTo30Minutes(body.start_time) : String(body.start_time).trim();
+    const endTime = roundTime ? roundTimeTo30Minutes(body.end_time) : String(body.end_time).trim();
     const breakMinutes = parseInt(body.break_minutes) || 0;
     const totalHours = parseFloat(body.total_hours) || calculateShiftHours(startTime, endTime, breakMinutes);
+    const media = Array.isArray(body.media) ? JSON.stringify(body.media) : (body.media || '');
+
+    // Duplicate check
+    const isDup = (db.shifts || []).some(s => 
+      s.crew_id === authState.user.crew_id && 
+      (s.workerId === body.worker_id || s.worker_id === body.worker_id) && 
+      s.date === body.date && 
+      (s.startTime || s.start_time) === startTime && 
+      (s.endTime || s.end_time) === endTime
+    );
+    if (isDup) {
+      throw new Error('Doppelte Schicht: Für diesen Arbeiter existiert bereits eine Schicht zu dieser Zeit.');
+    }
+
     db.shifts.unshift({
       id: shiftId,
       crew_id: authState.user.crew_id,
       workerId: body.worker_id,
+      worker_id: body.worker_id,
       date: body.date,
       startTime: startTime,
       endTime: endTime,
@@ -356,7 +372,8 @@ function handleLocalApi(endpoint, method, body) {
       totalHours: totalHours,
       status: 'pending',
       approvedBy: null,
-      note: body.note || 'Live timer shift'
+      note: body.note || 'Live timer shift',
+      media: media
     });
     if (db.timers) delete db.timers[body.worker_id];
     saveLocalDb(db);
@@ -365,17 +382,31 @@ function handleLocalApi(endpoint, method, body) {
 
   if (cleanEndpoint === '/api/shifts/manual' && method === 'POST') {
     const workerIds = body.worker_ids || (body.worker_id ? [body.worker_id] : []);
-    const startTime = roundTimeTo30Minutes(body.start_time);
-    const endTime = roundTimeTo30Minutes(body.end_time);
+    const roundTime = body.round_time !== false;
+    const startTime = roundTime ? roundTimeTo30Minutes(body.start_time) : String(body.start_time).trim();
+    const endTime = roundTime ? roundTimeTo30Minutes(body.end_time) : String(body.end_time).trim();
     const breakMinutes = parseInt(body.break_minutes) || 0;
     const totalHours = parseFloat(body.total_hours) || calculateShiftHours(startTime, endTime, breakMinutes);
+    const media = Array.isArray(body.media) ? JSON.stringify(body.media) : (body.media || '');
     const shiftIds = [];
+
     workerIds.forEach((wid, idx) => {
+      // Duplicate check
+      const isDup = (db.shifts || []).some(s => 
+        s.crew_id === authState.user.crew_id && 
+        (s.workerId === wid || s.worker_id === wid) && 
+        s.date === body.date && 
+        (s.startTime || s.start_time) === startTime && 
+        (s.endTime || s.end_time) === endTime
+      );
+      if (isDup) return;
+
       const shiftId = 's_' + Date.now() + '_' + idx;
       db.shifts.unshift({
         id: shiftId,
         crew_id: authState.user.crew_id,
         workerId: wid,
+        worker_id: wid,
         date: body.date,
         startTime: startTime,
         endTime: endTime,
@@ -383,10 +414,15 @@ function handleLocalApi(endpoint, method, body) {
         totalHours: totalHours,
         status: 'pending',
         approvedBy: null,
-        note: body.note || ''
+        note: body.note || '',
+        media: media
       });
       shiftIds.push(shiftId);
     });
+
+    if (shiftIds.length === 0) {
+      throw new Error('Für alle gewählten Mitarbeiter existieren bereits Schichten zu dieser Zeit.');
+    }
     saveLocalDb(db);
     return { success: true, shift_ids: shiftIds, shift_id: shiftIds[0] };
   }
@@ -397,9 +433,49 @@ function handleLocalApi(endpoint, method, body) {
     const shift = db.shifts.find(s => s.id === shiftId);
     if (shift) {
       shift.status = body.status;
-      shift.approvedBy = 'Supervisor';
+      shift.approvedBy = authState.user?.role === 'supervisor' ? 'Supervisor' : 'Leader';
       saveLocalDb(db);
     }
+    return { success: true };
+  }
+
+  // Edit Shift (Leader only)
+  if (cleanEndpoint.startsWith('/api/shifts/') && !cleanEndpoint.endsWith('/status') && method === 'PUT') {
+    if (authState.user?.role !== 'leader') {
+      throw new Error('Only leaders can edit shifts');
+    }
+    const parts = cleanEndpoint.split('/');
+    const shiftId = parts[3];
+    const shift = db.shifts.find(s => s.id === shiftId);
+    if (!shift) {
+      throw new Error('Shift not found');
+    }
+    const wid = body.worker_id || body.workerId || shift.workerId;
+    shift.workerId = wid;
+    shift.worker_id = wid;
+    if (body.date) shift.date = body.date;
+    if (body.start_time || body.startTime) shift.startTime = body.start_time || body.startTime;
+    if (body.end_time || body.endTime) shift.endTime = body.end_time || body.endTime;
+    if (body.break_minutes !== undefined || body.breakMinutes !== undefined) {
+      shift.breakMinutes = parseInt(body.break_minutes ?? body.breakMinutes) || 0;
+    }
+    shift.totalHours = parseFloat(body.total_hours ?? body.totalHours) || calculateShiftHours(shift.startTime, shift.endTime, shift.breakMinutes);
+    if (body.note !== undefined) shift.note = body.note;
+    if (body.media !== undefined) shift.media = Array.isArray(body.media) ? JSON.stringify(body.media) : body.media;
+    if (body.status) shift.status = body.status;
+    saveLocalDb(db);
+    return { success: true };
+  }
+
+  // Delete Shift (Leader only)
+  if (cleanEndpoint.startsWith('/api/shifts/') && method === 'DELETE') {
+    if (authState.user?.role !== 'leader') {
+      throw new Error('Only leaders can delete shifts');
+    }
+    const parts = cleanEndpoint.split('/');
+    const shiftId = parts[3];
+    db.shifts = (db.shifts || []).filter(s => s.id !== shiftId);
+    saveLocalDb(db);
     return { success: true };
   }
 
@@ -408,7 +484,7 @@ function handleLocalApi(endpoint, method, body) {
     db.shifts.forEach(s => {
       if (s.crew_id === crewId && s.status === 'pending') {
         s.status = 'approved';
-        s.approvedBy = 'Supervisor';
+        s.approvedBy = authState.user?.role === 'supervisor' ? 'Supervisor' : 'Leader';
       }
     });
     saveLocalDb(db);
@@ -417,16 +493,32 @@ function handleLocalApi(endpoint, method, body) {
 
   if (cleanEndpoint === '/api/payments' && method === 'POST') {
     const paymentId = 'p_' + Date.now();
+    const wid = body.worker_id || body.workerId;
+    const amount = parseFloat(body.amount) || 0;
+
+    // Duplicate pending payment check
+    const isDup = (db.payments || []).some(p => 
+      p.crew_id === authState.user.crew_id && 
+      (p.workerId === wid || p.worker_id === wid) && 
+      p.date === body.date && 
+      parseFloat(p.amount) === amount && 
+      p.status === 'pending'
+    );
+    if (isDup) {
+      throw new Error('Eine identische ausstehende Zahlung existiert bereits für diesen Tag.');
+    }
+
     db.payments.unshift({
       id: paymentId,
       crew_id: authState.user.crew_id,
-      workerId: body.worker_id,
-      amount: parseFloat(body.amount) || 0,
+      workerId: wid,
+      worker_id: wid,
+      amount: amount,
       date: body.date,
       receivedBy: body.received_by || '',
       loggedBy: authState.user.role.toUpperCase(),
       comment: body.comment || '',
-      status: 'pending'
+      status: body.status || 'pending'
     });
     saveLocalDb(db);
     return { success: true, payment_id: paymentId };
@@ -458,17 +550,206 @@ const DEFAULT_DATA = {
 let authState = loadAuthToken(); // { token, user }
 let appData = loadLocalData();
 
+let currentLang = localStorage.getItem('allesbau_lang') || 'de';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'de' ? 'en' : 'de';
+  localStorage.setItem('allesbau_lang', currentLang);
+  renderApp();
+}
+
+const I18N = {
+  de: {
+    nav_home: "Übersicht",
+    nav_calendar: "Kalender",
+    nav_payments: "Auszahlungen",
+    active_now: "Aktiv",
+    sync_tooltip: "Synchronisieren",
+    cal_title: "Kalender & Schichten",
+    cal_month_shifts: "Schichten im Monat",
+    download_report_pdf: "Monatsbericht herunterladen (PDF)",
+    download_report_pdf_worker: "Monatsbericht herunterladen (PDF) — ",
+    filter_worker: "Mitarbeiter",
+    all_workers: "Alle Mitarbeiter",
+    filter_status: "Status Filter",
+    all_status: "Alle Status",
+    status_pending: "Ausstehend",
+    status_approved: "Genehmigt",
+    status_rejected: "Abgelehnt",
+    stat_total_approved_all_time: "Genehmigt (Gesamt)",
+    stat_approved_month: "Genehmigt (Monat)",
+    stat_work_days_month: "Arbeitstage (Monat)",
+    stat_pending_hours: "Ausstehend (Std.)",
+    all_time: "Alle Zeiten",
+    this_month: "Dieser Monat",
+    under_review: "Zur Prüfung",
+    col_date: "Datum / Tag",
+    col_worker: "Mitarbeiter",
+    col_time: "Arbeitszeit",
+    col_break: "Pause",
+    col_hours: "Stunden",
+    col_status: "Status",
+    col_actions: "Aktion",
+    col_comments: "Kommentare",
+    col_media: "Fotos",
+    workers_count: "Arbeiter",
+    show_photos: "Fotos",
+    no_shifts_month: "Keine Schichten für diesen Monat gefunden.",
+    edit: "Bearbeiten",
+    delete: "Löschen",
+    approve: "Genehmigen",
+    reject: "Ablehnen",
+    approve_all: "Alle genehmigen",
+    pending_approval_notice: "ausstehende Schichten zur Prüfung",
+    clock_in: "Schicht starten",
+    clock_out: "Schicht beenden",
+    pause: "Pause",
+    resume: "Weiter",
+    running: "Läuft",
+    stop: "Stop",
+    round_toggle: "30-Minuten-Rundung aktivieren",
+    shift_note: "Notiz / Baustelle",
+    upload_photos: "Fotos hinzufügen (Tagesende)",
+    photos_selected: "Fotos ausgewählt",
+    stop_and_submit: "Schicht abschließen & senden",
+    cancel: "Abbrechen",
+    save: "Speichern",
+    payments_title: "Abrechnung & Auszahlungen",
+    total_earned: "Verdienst",
+    total_paid: "Bereits bezahlt",
+    balance_remaining: "Noch offen",
+    log_payment: "Auszahlung erfassen",
+    payment_details_invoice: "Beleg / Quittung",
+    saving: "Wird gespeichert...",
+    dup_shift_warning: "Für diesen Mitarbeiter existiert bereits eine Schicht zu dieser Zeit!",
+    dup_payment_warning: "Eine identische ausstehende Zahlung existiert bereits!",
+    confirm_delete_shift: "Möchten Sie diese Schicht wirklich unwiderruflich löschen?",
+    shift_deleted: "Schicht erfolgreich gelöscht! 🗑️",
+    shift_saved: "Schicht erfolgreich aktualisiert! ✅",
+    mark_approved_directly: "Direkt als genehmigt buchen (vom Lohn abziehen)",
+    all_workers_worked: "Arbeiter am Tag",
+    details_expand: "Details anzeigen",
+    details_collapse: "Details schließen"
+  },
+  en: {
+    nav_home: "Home",
+    nav_calendar: "Calendar",
+    nav_payments: "Payments",
+    active_now: "Active",
+    sync_tooltip: "Synchronize",
+    cal_title: "Calendar & Shifts",
+    cal_month_shifts: "shifts in month",
+    download_report_pdf: "Download Monthly Report (PDF)",
+    download_report_pdf_worker: "Download Monthly Report (PDF) — ",
+    filter_worker: "Worker",
+    all_workers: "All Workers",
+    filter_status: "Status Filter",
+    all_status: "All Statuses",
+    status_pending: "Pending",
+    status_approved: "Approved",
+    status_rejected: "Rejected",
+    stat_total_approved_all_time: "Approved (All Time)",
+    stat_approved_month: "Approved (Month)",
+    stat_work_days_month: "Work Days (Month)",
+    stat_pending_hours: "Pending Hours",
+    all_time: "All Time",
+    this_month: "This Month",
+    under_review: "Under Review",
+    col_date: "Date / Day",
+    col_worker: "Worker",
+    col_time: "Working Hours",
+    col_break: "Break",
+    col_hours: "Hours",
+    col_status: "Status",
+    col_actions: "Action",
+    col_comments: "Comments",
+    col_media: "Photos",
+    workers_count: "workers",
+    show_photos: "Photos",
+    no_shifts_month: "No shifts found for this month.",
+    edit: "Edit",
+    delete: "Delete",
+    approve: "Approve",
+    reject: "Reject",
+    approve_all: "Approve All",
+    pending_approval_notice: "pending shifts under review",
+    clock_in: "Clock In",
+    clock_out: "Clock Out",
+    pause: "Pause",
+    resume: "Resume",
+    running: "Running",
+    stop: "Stop",
+    round_toggle: "Enable 30-minute interval rounding",
+    shift_note: "Site / Note",
+    upload_photos: "Attach End-of-Day Photos",
+    photos_selected: "photos selected",
+    stop_and_submit: "Stop & Submit Shift",
+    cancel: "Cancel",
+    save: "Save",
+    payments_title: "Payroll & Payouts",
+    total_earned: "Earned",
+    total_paid: "Already Paid",
+    balance_remaining: "Remaining Balance",
+    log_payment: "Log Payment",
+    payment_details_invoice: "Receipt / Invoice",
+    saving: "Saving...",
+    dup_shift_warning: "A shift already exists for this worker at this time!",
+    dup_payment_warning: "An identical pending payment already exists!",
+    confirm_delete_shift: "Are you sure you want to permanently delete this shift?",
+    shift_deleted: "Shift deleted successfully! 🗑️",
+    shift_saved: "Shift updated successfully! ✅",
+    mark_approved_directly: "Mark as approved immediately (deduct from wage)",
+    all_workers_worked: "Workers on day",
+    details_expand: "Show details",
+    details_collapse: "Hide details"
+  }
+};
+
+function t(key, fallback = '') {
+  return I18N[currentLang]?.[key] || I18N.de[key] || fallback || key;
+}
+
+function compressImageFile(file, maxWidth = 1000, quality = 0.75) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 let appState = {
   activeTab: 'home', // 'home' | 'calendar' | 'payments'
   selectedMonth: getCurrentMonthString(),
   calendarWorkerFilter: 'all',
   calendarStatusFilter: 'all',
   paymentWorkerFilter: 'all',
-  activeModal: null, // null | 'addUser' | 'manualShift' | 'logPayment' | 'changePassword' | 'stopTimerConfirm' | 'serverConfig'
+  activeModal: null, // null | 'addUser' | 'manualShift' | 'logPayment' | 'changePassword' | 'stopTimerConfirm' | 'serverConfig' | 'editShift' | 'paymentInvoice' | 'mediaViewer'
   modalPayload: null,
   authTab: 'login', // 'login' | 'register'
   isSyncing: false,
-  isOnline: Boolean(getApiBaseUrl())
+  isOnline: Boolean(getApiBaseUrl()),
+  isSubmitting: false,
+  expandedCalendarDays: {},
+  manualShiftMedia: []
 };
 
 // -------------------------------------------------------------
@@ -941,23 +1222,70 @@ function handleStopTimerPrompt(workerId) {
     rawEndTime,
     startTime,
     endTime,
+    roundTime: true,
+    breakMinutes,
     calculatedHours,
     date: getTodayString(),
-    breakMinutes,
-    note: 'Live timer shift log'
+    note: 'Live timer shift log',
+    media: []
   };
   appState.activeModal = 'stopTimerConfirm';
   renderApp();
 }
 
+function toggleStopTimerRounding(forceVal = null) {
+  const p = appState.modalPayload;
+  if (!p) return;
+  p.roundTime = forceVal !== null ? Boolean(forceVal) : !p.roundTime;
+  if (p.roundTime) {
+    p.startTime = roundTimeTo30Minutes(p.rawStartTime);
+    p.endTime = roundTimeTo30Minutes(p.rawEndTime);
+  } else {
+    p.startTime = p.rawStartTime;
+    p.endTime = p.rawEndTime;
+  }
+  const breakMins = parseInt(p.breakMinutes) || 0;
+  p.calculatedHours = calculateShiftHours(p.startTime, p.endTime, breakMins);
+  renderApp();
+}
+
+function updateStopTimerHours() {
+  const p = appState.modalPayload;
+  if (!p) return;
+  const breakMins = parseInt(p.breakMinutes) || 0;
+  p.calculatedHours = calculateShiftHours(p.startTime, p.endTime, breakMins);
+  const input = document.getElementById('stopTimerHoursInput');
+  if (input) input.value = p.calculatedHours;
+}
+
 async function handleConfirmStopTimer() {
+  if (appState.isSubmitting) return;
   const p = appState.modalPayload;
   if (!p) return;
 
-  const startTimeStr = roundTimeTo30Minutes(p.startTime);
-  const endTimeStr = roundTimeTo30Minutes(p.endTime);
+  const startTimeStr = p.startTime;
+  const endTimeStr = p.endTime;
   const breakMins = parseInt(p.breakMinutes) || 0;
   const totalHours = parseFloat(p.calculatedHours) || calculateShiftHours(startTimeStr, endTimeStr, breakMins);
+
+  // Double entry prevention
+  const isDup = (appData.shifts || []).some(s => 
+    (s.workerId === p.workerId || s.worker_id === p.workerId) &&
+    s.date === p.date &&
+    (s.startTime || s.start_time) === startTimeStr &&
+    (s.endTime || s.end_time) === endTimeStr
+  );
+  if (isDup) {
+    showToast(t('dup_shift_warning', 'Für diesen Mitarbeiter existiert bereits eine Schicht zu dieser Zeit!'), 'error');
+    return;
+  }
+
+  const submitBtn = document.getElementById('stopTimerSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = t('saving', 'Wird gespeichert...');
+  }
+  appState.isSubmitting = true;
 
   try {
     await apiRequest('/api/timers/stop', 'POST', {
@@ -965,23 +1293,27 @@ async function handleConfirmStopTimer() {
       date: p.date,
       start_time: startTimeStr,
       end_time: endTimeStr,
+      round_time: p.roundTime,
       break_minutes: breakMins,
       total_hours: totalHours,
-      note: p.note
+      note: p.note,
+      media: p.media || []
     });
     closeModal();
-    showToast(`Shift logged for ${p.workerName}: ${startTimeStr} - ${endTimeStr} (${totalHours} hrs)`);
+    showToast(`Schicht erfasst: ${p.workerName} (${startTimeStr} - ${endTimeStr}, ${totalHours} Std.)`);
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
+  } finally {
+    appState.isSubmitting = false;
   }
 }
 
 async function handleSaveManualShift(e) {
   e.preventDefault();
-  const form = e.target;
+  if (appState.isSubmitting) return;
 
-  // Collect all checked worker IDs (support multi-worker selection)
+  const form = e.target;
   let workerIds = [];
   const checkedBoxes = form.querySelectorAll('input[name="workerId"]:checked');
   if (checkedBoxes.length > 0) {
@@ -996,14 +1328,43 @@ async function handleSaveManualShift(e) {
   }
 
   const date = form.date.value;
-  const rawStartTime = form.startTime.value;
-  const rawEndTime = form.endTime.value;
+  const roundTime = form.roundTimeToggle ? form.roundTimeToggle.checked : true;
+  let startTime = form.startTime.value;
+  let endTime = form.endTime.value;
+  if (roundTime) {
+    startTime = roundTimeTo30Minutes(startTime);
+    endTime = roundTimeTo30Minutes(endTime);
+  }
   const breakMinutes = parseInt(form.breakMinutes.value) || 0;
   const note = form.note.value;
-
-  const startTime = roundTimeTo30Minutes(rawStartTime);
-  const endTime = roundTimeTo30Minutes(rawEndTime);
   const totalHours = calculateShiftHours(startTime, endTime, breakMinutes);
+
+  // Double entry check across workers
+  const duplicateWorkerNames = [];
+  workerIds.forEach(wid => {
+    const existing = (appData.shifts || []).find(s => 
+      (s.workerId === wid || s.worker_id === wid) &&
+      s.date === date &&
+      (s.startTime || s.start_time) === startTime &&
+      (s.endTime || s.end_time) === endTime
+    );
+    if (existing) {
+      const w = getWorker(wid);
+      duplicateWorkerNames.push(w ? w.name : wid);
+    }
+  });
+
+  if (duplicateWorkerNames.length > 0) {
+    showToast(`Doppelte Schicht: Für ${duplicateWorkerNames.join(', ')} existiert bereits eine Schicht um diese Zeit!`, 'error');
+    return;
+  }
+
+  const submitBtn = document.getElementById('manualShiftSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = t('saving', 'Wird gespeichert...');
+  }
+  appState.isSubmitting = true;
 
   try {
     await apiRequest('/api/shifts/manual', 'POST', {
@@ -1012,13 +1373,122 @@ async function handleSaveManualShift(e) {
       date,
       start_time: startTime,
       end_time: endTime,
+      round_time: roundTime,
       break_minutes: breakMinutes,
       total_hours: totalHours,
-      note
+      note,
+      media: appState.manualShiftMedia || []
     });
+    appState.manualShiftMedia = [];
     closeModal();
     const countText = workerIds.length > 1 ? `für ${workerIds.length} Mitarbeiter` : '';
     showToast(`Schicht ${countText} erfasst: ${startTime} - ${endTime} (${totalHours.toFixed(1)} Std.)`);
+    syncDataWithServer();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    appState.isSubmitting = false;
+  }
+}
+
+function openEditShiftModal(shiftId) {
+  const shift = (appData.shifts || []).find(s => s.id === shiftId) || (getLocalDb().shifts || []).find(s => s.id === shiftId);
+  if (!shift) {
+    showToast('Schicht nicht gefunden', 'error');
+    return;
+  }
+  let mediaArr = [];
+  if (Array.isArray(shift.media)) {
+    mediaArr = [...shift.media];
+  } else if (typeof shift.media === 'string' && shift.media.trim()) {
+    try { mediaArr = JSON.parse(shift.media) || []; } catch(e) { mediaArr = [shift.media]; }
+  }
+
+  const wid = shift.workerId || shift.worker_id;
+  const startTime = shift.startTime || shift.start_time || '08:00';
+  const endTime = shift.endTime || shift.end_time || '17:00';
+  const breakMinutes = shift.breakMinutes ?? shift.break_minutes ?? 0;
+  const totalHours = shift.totalHours ?? shift.total_hours ?? calculateShiftHours(startTime, endTime, breakMinutes);
+
+  appState.modalPayload = {
+    id: shift.id,
+    workerId: wid,
+    date: shift.date,
+    startTime: startTime,
+    endTime: endTime,
+    breakMinutes: breakMinutes,
+    totalHours: totalHours,
+    note: shift.note || '',
+    status: shift.status || 'pending',
+    media: mediaArr,
+    roundTime: false
+  };
+  appState.activeModal = 'editShift';
+  renderApp();
+}
+
+async function handleSaveEditedShift(e) {
+  e.preventDefault();
+  if (appState.isSubmitting) return;
+  const p = appState.modalPayload;
+  if (!p) return;
+
+  const form = e.target;
+  const workerId = form.workerId.value;
+  const date = form.date.value;
+  const startTime = form.startTime.value;
+  const endTime = form.endTime.value;
+  const breakMinutes = parseInt(form.breakMinutes.value) || 0;
+  const note = form.note.value;
+  const status = form.status.value;
+  const totalHours = calculateShiftHours(startTime, endTime, breakMinutes);
+
+  const submitBtn = document.getElementById('editShiftSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = t('saving', 'Wird gespeichert...');
+  }
+  appState.isSubmitting = true;
+
+  try {
+    await apiRequest(`/api/shifts/${p.id}`, 'PUT', {
+      worker_id: workerId,
+      date,
+      start_time: startTime,
+      end_time: endTime,
+      break_minutes: breakMinutes,
+      total_hours: totalHours,
+      note,
+      status,
+      media: p.media || []
+    });
+    closeModal();
+    showToast(t('shift_saved', 'Schicht erfolgreich aktualisiert! ✅'));
+    syncDataWithServer();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    appState.isSubmitting = false;
+  }
+}
+
+async function handleDeleteShift(shiftId) {
+  if (authState.user?.role !== 'leader') {
+    showToast('Nur der Leiter kann Schichten löschen', 'error');
+    return;
+  }
+  const shift = (appData.shifts || []).find(s => s.id === shiftId);
+  const w = shift ? getWorker(shift.workerId || shift.worker_id) : null;
+  const workerName = w ? w.name : 'Mitarbeiter';
+  const dateStr = shift ? shift.date : '';
+
+  if (!confirm(`${t('confirm_delete_shift', 'Möchten Sie diese Schicht wirklich unwiderruflich löschen?')}\n(${workerName}, ${dateStr})`)) {
+    return;
+  }
+
+  try {
+    await apiRequest(`/api/shifts/${shiftId}`, 'DELETE');
+    showToast(t('shift_deleted', 'Schicht erfolgreich gelöscht! 🗑️'));
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1028,7 +1498,7 @@ async function handleSaveManualShift(e) {
 async function handleApproveShift(shiftId) {
   try {
     await apiRequest(`/api/shifts/${shiftId}/status`, 'PUT', { status: 'approved' });
-    showToast('Shift approved! 🟢');
+    showToast('Schicht genehmigt! 🟢');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1038,7 +1508,7 @@ async function handleApproveShift(shiftId) {
 async function handleRejectShift(shiftId) {
   try {
     await apiRequest(`/api/shifts/${shiftId}/status`, 'PUT', { status: 'rejected' });
-    showToast('Shift rejected 🔴', 'error');
+    showToast('Schicht abgelehnt 🔴', 'error');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1048,7 +1518,7 @@ async function handleRejectShift(shiftId) {
 async function handleApproveAllShifts() {
   try {
     await apiRequest('/api/shifts/approve-all', 'POST');
-    showToast('Approved all pending shifts! 🟢');
+    showToast('Alle ausstehenden Schichten genehmigt! 🟢');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1057,12 +1527,40 @@ async function handleApproveAllShifts() {
 
 async function handleSavePayment(e) {
   e.preventDefault();
+  if (appState.isSubmitting) return;
+
   const form = e.target;
   const workerId = form.workerId.value;
   const amount = parseFloat(form.amount.value);
   const receivedBy = form.receivedBy.value;
   const date = form.date.value;
   const comment = form.comment.value;
+  const markApproved = form.markApproved ? form.markApproved.checked : (authState.user?.role === 'leader');
+  const status = markApproved ? 'approved' : 'pending';
+
+  if (isNaN(amount) || amount <= 0) {
+    showToast('Bitte einen Betrag größer als 0 eingeben', 'error');
+    return;
+  }
+
+  // Duplicate pending payment check
+  const isDup = (appData.payments || []).some(p => 
+    (p.workerId === workerId || p.worker_id === workerId) &&
+    p.date === date &&
+    parseFloat(p.amount) === amount &&
+    p.status === 'pending'
+  );
+  if (isDup) {
+    showToast(t('dup_payment_warning', 'Eine identische ausstehende Zahlung existiert bereits für diesen Tag!'), 'error');
+    return;
+  }
+
+  const submitBtn = document.getElementById('savePaymentSubmitBtn');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = t('saving', 'Wird gespeichert...');
+  }
+  appState.isSubmitting = true;
 
   try {
     await apiRequest('/api/payments', 'POST', {
@@ -1070,20 +1568,23 @@ async function handleSavePayment(e) {
       amount,
       date,
       received_by: receivedBy,
-      comment
+      comment,
+      status
     });
     closeModal();
-    showToast('Payment logged! (Pending Approval)');
+    showToast(status === 'approved' ? 'Zahlung gebucht und direkt verrechnet! 💵' : 'Zahlung erfasst! (Ausstehend)');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
+  } finally {
+    appState.isSubmitting = false;
   }
 }
 
 async function handleApprovePayment(paymentId) {
   try {
     await apiRequest(`/api/payments/${paymentId}/status`, 'PUT', { status: 'approved' });
-    showToast('Payment approved! Balance updated. 💵');
+    showToast('Zahlung genehmigt! Restbetrag aktualisiert. 💵');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1093,11 +1594,229 @@ async function handleApprovePayment(paymentId) {
 async function handleRejectPayment(paymentId) {
   try {
     await apiRequest(`/api/payments/${paymentId}/status`, 'PUT', { status: 'rejected' });
-    showToast('Payment rejected 🔴', 'error');
+    showToast('Zahlung abgelehnt 🔴', 'error');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+function toggleCalendarDay(dateStr) {
+  appState.expandedCalendarDays[dateStr] = !appState.expandedCalendarDays[dateStr];
+  renderApp();
+}
+
+function openMediaViewer(images, title = 'Fotos') {
+  let list = [];
+  if (Array.isArray(images)) list = images;
+  else if (typeof images === 'string' && images.trim()) {
+    try { list = JSON.parse(images) || []; } catch(e) { list = [images]; }
+  }
+  if (!list || list.length === 0) {
+    showToast('Keine Fotos vorhanden', 'info');
+    return;
+  }
+  appState.modalPayload = {
+    images: list,
+    title: title,
+    activeIndex: 0
+  };
+  appState.activeModal = 'mediaViewer';
+  renderApp();
+}
+
+function openShiftMediaViewer(shiftId) {
+  const shift = (appData.shifts || []).find(s => s.id === shiftId);
+  if (!shift || !shift.media) {
+    showToast('Keine Fotos vorhanden', 'info');
+    return;
+  }
+  const w = getWorker(shift.workerId || shift.worker_id);
+  openMediaViewer(shift.media, `Fotos: ${w ? w.name : 'Mitarbeiter'} (${formatDate(shift.date)})`);
+}
+
+function openDateMediaViewer(dateStr) {
+  const dayShifts = (appData.shifts || []).filter(s => s.date === dateStr);
+  const allImages = [];
+  dayShifts.forEach(s => {
+    if (s.media) {
+      if (Array.isArray(s.media)) allImages.push(...s.media);
+      else if (typeof s.media === 'string') {
+        try {
+          const parsed = JSON.parse(s.media);
+          if (Array.isArray(parsed)) allImages.push(...parsed);
+          else allImages.push(s.media);
+        } catch(e) {
+          allImages.push(s.media);
+        }
+      }
+    }
+  });
+  if (allImages.length === 0) {
+    showToast('Keine Fotos für diesen Tag vorhanden', 'info');
+    return;
+  }
+  openMediaViewer(allImages, `Fotos vom ${formatDate(dateStr)}`);
+}
+
+function downloadPaymentInvoicePdf(paymentId) {
+  const p = (appData.payments || []).find(x => x.id === paymentId) || (getLocalDb().payments || []).find(x => x.id === paymentId);
+  if (!p) {
+    showToast('Zahlung nicht gefunden', 'error');
+    return;
+  }
+  const wid = p.workerId || p.worker_id;
+  const worker = getWorker(wid) || (getLocalDb().users || []).find(u => u.id === wid) || { name: p.receivedBy || 'Mitarbeiter', id: wid, role: 'worker' };
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showToast('PDF-Modul wird geladen... Bitte kurz warten.', 'error');
+    return;
+  }
+
+  showToast(`Erstelle Zahlungsbeleg für ${worker.name}... ⏳`, 'info');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const brandYellow = [245, 192, 0];
+  const darkGray = [26, 26, 26];
+
+  // Header Banner
+  doc.setFillColor(...brandYellow);
+  doc.rect(0, 0, 210, 26, 'F');
+
+  doc.setTextColor(17, 17, 17);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.text('allesBau', 14, 15);
+
+  doc.setFontSize(9.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Arbeitsstunden & Lohnverwaltung • Bauunternehmen', 14, 21);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('ZAHLUNGSBELEG & LOHNQUITTUNG', 210 - 14, 15, { align: 'right' });
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Beleg-Nr: AB-PAY-${(p.id || '').replace('p_', '').toUpperCase()}`, 210 - 14, 21, { align: 'right' });
+
+  // Metadata Section
+  doc.setTextColor(30, 30, 30);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('EMPFÄNGER (ARBEITNEHMER):', 14, 38);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Name: ${worker.name}`, 14, 44);
+  doc.text(`Mitarbeiter-ID: ${worker.id || '-'}`, 14, 50);
+  doc.text(`Rolle: ${worker.role === 'supervisor' ? 'Vorarbeiter' : 'Bauarbeiter'}`, 14, 56);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('ZAHLUNGSDETAILS:', 120, 38);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Zahlungsdatum: ${formatDate(p.date)}`, 120, 44);
+  doc.text(`Ausgezahlt durch: ${p.loggedBy || 'AllesBau Leitung'}`, 120, 50);
+  doc.text(`Status: ${p.status === 'approved' ? 'GENEHMIGT / AUSGEZAHLT' : 'AUSSTEHEND'}`, 120, 56);
+
+  // Table
+  doc.autoTable({
+    startY: 64,
+    theme: 'grid',
+    head: [['Pos.', 'Beschreibung / Verwendungszweck', 'Empfänger bestätigt', 'Auszahlungsbetrag']],
+    body: [
+      [
+        '1',
+        p.comment ? `Lohnabschlag / Auszahlung: ${p.comment}` : 'Reguläre Abschlagszahlung für geleistete Bauarbeiten',
+        p.receivedBy || worker.name,
+        formatCurrency(p.amount)
+      ]
+    ],
+    foot: [
+      ['', 'GESAMTAUSZAHLUNGSBETRAG (NETTO)', '', formatCurrency(p.amount)]
+    ],
+    headStyles: {
+      fillColor: darkGray,
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 9
+    },
+    footStyles: {
+      fillColor: brandYellow,
+      textColor: [17, 17, 17],
+      fontStyle: 'bold',
+      fontSize: 10
+    },
+    styles: {
+      font: 'helvetica',
+      fontSize: 9,
+      cellPadding: 4
+    },
+    columnStyles: {
+      0: { cellWidth: 15, halign: 'center' },
+      1: { cellWidth: 95 },
+      2: { cellWidth: 45 },
+      3: { cellWidth: 35, halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 12;
+
+  // Legal Confirmation Notice
+  doc.setFillColor(248, 248, 248);
+  doc.rect(14, finalY, 182, 22, 'F');
+  doc.setDrawColor(220, 220, 220);
+  doc.rect(14, finalY, 182, 22, 'S');
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(80, 80, 80);
+  doc.setFont('helvetica', 'italic');
+  doc.text(
+    'Hiermit wird bestätigt, dass der oben genannte Auszahlungsbetrag ordnungsgemäß ausgezahlt und vom Empfänger\n' +
+    'in voller Höhe dankend bar oder per Banküberweisung erhalten wurde. Der Betrag wird mit dem Lohnanspruch verrechnet.',
+    18,
+    finalY + 7
+  );
+
+  // Signatures
+  const sigY = finalY + 36;
+  doc.setDrawColor(120, 120, 120);
+
+  // Left: Employer
+  doc.line(18, sigY + 15, 90, sigY + 15);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text('Ort, Datum', 18, sigY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('AllesBau (Arbeitgeber)', 18, sigY + 25);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.text('Unterschrift zur Auszahlung', 18, sigY + 30);
+
+  // Right: Employee
+  doc.line(125, sigY + 15, 197, sigY + 15);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text('Ort, Datum', 125, sigY + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${worker.name} (Empfänger / Arbeitnehmer)`, 125, sigY + 25);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(8);
+  doc.text('Unterschrift zum Empfang', 125, sigY + 30);
+
+  // Footer
+  doc.setFontSize(7.5);
+  doc.setTextColor(150, 150, 150);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`AllesBau Bauunternehmen • Erstellt am ${new Date().toLocaleDateString('de-DE')} • Beleg #${p.id}`, 105, 285, { align: 'center' });
+
+  doc.save(`AllesBau_Zahlungsbeleg_${worker.name.replace(/\s+/g, '_')}_${p.date}.pdf`);
+  showToast('Zahlungsbeleg als PDF heruntergeladen! 📄');
 }
 
 function openModal(modalName, payload = null) {
@@ -1262,8 +1981,13 @@ function renderHeader() {
           </div>
         </div>
 
-        <!-- Right: Sync + User -->
+        <!-- Right: Language + Sync + User -->
         <div class="flex items-center gap-1.5 flex-shrink-0">
+          <button onclick="toggleLanguage()" 
+            class="px-2.5 py-1.5 rounded-full border border-[#2a2a2a] bg-[#1a1a1a] text-[11px] font-bold text-[#F5C000] hover:text-white hover:border-[#F5C000]/60 transition active-press flex items-center gap-1 shadow-sm"
+            title="Sprache wechseln / Switch Language">
+            <span>${currentLang === 'de' ? '🇩🇪 DE' : '🇬🇧 EN'}</span>
+          </button>
           <button onclick="syncDataWithServer(); showToast('Daten aktualisiert! 🔄', 'info');" 
             title="Synchronisieren" class="p-1.5 rounded-full text-[#555] hover:text-white hover:bg-[#1e1e1e] border border-[#222] transition active-press">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1873,7 +2597,7 @@ function renderCalendar() {
   const isLeader = user?.role === 'leader';
   const isSupervisor = user?.role === 'supervisor';
   const isWorker = user?.role === 'worker';
-  const canApprove = isSupervisor;
+  const canApprove = isSupervisor || isLeader;
 
   const selectedWorkerId = isWorker ? user.id : appState.calendarWorkerFilter;
   const selectedWorker = selectedWorkerId !== 'all' ? getWorker(selectedWorkerId) : null;
@@ -1883,33 +2607,42 @@ function renderCalendar() {
   const month = parseInt(monthStr);
   const daysInMonth = new Date(year, month, 0).getDate();
 
-  const filteredShifts = appData.shifts.filter(s => {
-    if (s.date && !s.date.startsWith(appState.selectedMonth)) return false;
+  // 1. Shifts for selected worker across ALL TIME (for stat: Total approved hours for all time)
+  const allTimeShifts = (appData.shifts || []).filter(s => {
     const sWorkerId = s.workerId || s.worker_id;
     if (selectedWorkerId !== 'all' && sWorkerId !== selectedWorkerId) return false;
+    return true;
+  });
+
+  const totalApprovedHoursAllTime = allTimeShifts
+    .filter(s => s.status === 'approved')
+    .reduce((sum, s) => sum + (parseFloat(s.totalHours ?? s.total_hours) || 0), 0);
+
+  // 2. Filtered shifts for the selected month and status filter
+  const monthShifts = allTimeShifts.filter(s => s.date && s.date.startsWith(appState.selectedMonth));
+  const filteredShifts = monthShifts.filter(s => {
     if (appState.calendarStatusFilter !== 'all' && s.status !== appState.calendarStatusFilter) return false;
     return true;
   });
 
-  let totalWorkedHours = 0;
-  let approvedHours = 0;
-  let totalWorkerPay = 0;
-  let totalSupervisorCost = 0;
+  // Approved hours for CURRENT MONTH
+  const approvedHoursCurrentMonth = monthShifts
+    .filter(s => s.status === 'approved')
+    .reduce((sum, s) => sum + (parseFloat(s.totalHours ?? s.total_hours) || 0), 0);
 
-  filteredShifts.forEach(s => {
-    const hrs = (parseFloat(s.totalHours ?? s.total_hours) || 0);
-    totalWorkedHours += hrs;
-    if (s.status === 'approved') approvedHours += hrs;
+  // Total work days in CURRENT MONTH
+  const workDaysCurrentMonth = new Set(
+    monthShifts
+      .filter(s => (parseFloat(s.totalHours ?? s.total_hours) || 0) > 0 && s.status !== 'rejected')
+      .map(s => s.date)
+  ).size;
 
-    const w = getWorker(s.workerId || s.worker_id);
-    const wRate = w ? (parseFloat(w.hourly_rate ?? w.rate) || 0) : 0;
-    const bRate = w ? (parseFloat(w.billing_rate ?? wRate) || wRate) : 0;
-    totalWorkerPay += hrs * wRate;
-    totalSupervisorCost += hrs * bRate;
-  });
+  // Total pending hours
+  const pendingHoursMonth = monthShifts
+    .filter(s => s.status === 'pending')
+    .reduce((sum, s) => sum + (parseFloat(s.totalHours ?? s.total_hours) || 0), 0);
 
-  const totalLeaderCut = Math.max(0, totalSupervisorCost - totalWorkerPay);
-  const pendingCount = appData.shifts.filter(s => s.status === 'pending').length;
+  const pendingCount = monthShifts.filter(s => s.status === 'pending').length;
 
   return `
     <div class="space-y-4">
@@ -1920,285 +2653,432 @@ function renderCalendar() {
           <button onclick="changeMonth(-1)" class="p-2 text-slate-300 hover:bg-[#222] rounded-xl transition active-press">◀</button>
           <div class="text-center">
             <h2 class="text-base font-extrabold text-white">${formatMonthYear(appState.selectedMonth)}</h2>
-            <span class="text-[11px] text-[#888] font-medium">${filteredShifts.length} Schichten im Monat</span>
+            <span class="text-[11px] text-[#888] font-medium">${monthShifts.length} ${t('cal_month_shifts', 'Schichten im Monat')}</span>
           </div>
           <button onclick="changeMonth(1)" class="p-2 text-slate-300 hover:bg-[#222] rounded-xl transition active-press">▶</button>
         </div>
 
-        <!-- 1-Page Monthly PDF Report Generator Button -->
+        <!-- 1-Page Monthly PDF Report Generator Button (Always German document) -->
         <button onclick="handleTriggerMonthlyReport()" 
           class="w-full bg-gradient-to-r from-[#F5C000] to-[#e6b400] hover:from-[#ffd333] hover:to-[#F5C000] text-black font-black px-4 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#F5C000]/15 active-press transition">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
-          <span class="truncate">${selectedWorker ? `Monatsbericht herunterladen (PDF) — ${selectedWorker.name}` : 'Monatsbericht herunterladen (1-Seite PDF)'}</span>
+          <span class="truncate">${selectedWorker ? `${t('download_report_pdf_worker', 'Monatsbericht herunterladen (PDF) — ')}${selectedWorker.name}` : t('download_report_pdf', 'Monatsbericht herunterladen (1-Seite PDF)')}</span>
         </button>
 
         <!-- Filter Controls -->
         <div class="pt-3 border-t border-[#222] grid grid-cols-2 gap-2">
           ${!isWorker ? `
             <div>
-              <label class="text-[10px] uppercase font-bold text-[#888] block mb-1">Mitarbeiter</label>
+              <label class="text-[10px] uppercase font-bold text-[#888] block mb-1">${t('filter_worker', 'Mitarbeiter')}</label>
               <select onchange="appState.calendarWorkerFilter=this.value; renderApp();" class="w-full bg-[#1c1c1c] text-white text-xs border border-[#333] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5C000]/60">
-                <option value="all" ${appState.calendarWorkerFilter === 'all' ? 'selected' : ''}>Alle Mitarbeiter</option>
+                <option value="all" ${appState.calendarWorkerFilter === 'all' ? 'selected' : ''}>${t('all_workers', 'Alle Mitarbeiter')}</option>
                 ${appData.workers.filter(w => w.role === 'worker').map(w => `<option value="${w.id}" ${appState.calendarWorkerFilter === w.id ? 'selected' : ''}>${w.name}</option>`).join('')}
               </select>
             </div>
           ` : ''}
 
           <div class="${isWorker ? 'col-span-2' : ''}">
-            <label class="text-[10px] uppercase font-bold text-[#888] block mb-1">Status Filter</label>
+            <label class="text-[10px] uppercase font-bold text-[#888] block mb-1">${t('filter_status', 'Status Filter')}</label>
             <select onchange="appState.calendarStatusFilter=this.value; renderApp();" class="w-full bg-[#1c1c1c] text-white text-xs border border-[#333] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5C000]/60">
-              <option value="all" ${appState.calendarStatusFilter === 'all' ? 'selected' : ''}>Alle Status</option>
-              <option value="pending" ${appState.calendarStatusFilter === 'pending' ? 'selected' : ''}>🟡 Ausstehend (Pending)</option>
-              <option value="approved" ${appState.calendarStatusFilter === 'approved' ? 'selected' : ''}>🟢 Genehmigt (Approved)</option>
-              <option value="rejected" ${appState.calendarStatusFilter === 'rejected' ? 'selected' : ''}>🔴 Abgelehnt (Rejected)</option>
+              <option value="all" ${appState.calendarStatusFilter === 'all' ? 'selected' : ''}>${t('all_status', 'Alle Status')}</option>
+              <option value="pending" ${appState.calendarStatusFilter === 'pending' ? 'selected' : ''}>🟡 ${t('status_pending', 'Ausstehend (Pending)')}</option>
+              <option value="approved" ${appState.calendarStatusFilter === 'approved' ? 'selected' : ''}>🟢 ${t('status_approved', 'Genehmigt (Approved)')}</option>
+              <option value="rejected" ${appState.calendarStatusFilter === 'rejected' ? 'selected' : ''}>🔴 ${t('status_rejected', 'Abgelehnt (Rejected)')}</option>
             </select>
           </div>
         </div>
       </div>
 
-      <!-- Hours Only Summary (No Earnings in Calendar) -->
+      <!-- 4 Stat Cards: Approved All Time, Approved Month, Work Days Month, Pending Hours -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <!-- 1. Approved All Time -->
         <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-[#888] font-bold uppercase block">Gesamtstunden</span>
-          <div class="text-base font-black text-white mt-0.5">${totalWorkedHours.toFixed(1)} Std.</div>
-          <div class="text-[10px] text-[#888] mt-0.5">${filteredShifts.length} Schichten</div>
+          <span class="text-[10px] text-[#F5C000] font-bold uppercase block truncate">${t('stat_total_approved_all_time', 'Genehmigt (Gesamt)')}</span>
+          <div class="text-base font-black text-white mt-0.5">${totalApprovedHoursAllTime.toFixed(1)} Std.</div>
+          <div class="text-[10px] text-[#888] mt-0.5">${t('all_time', 'Alle Zeiten')}</div>
         </div>
 
+        <!-- 2. Approved Current Month -->
         <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-emerald-400 font-bold uppercase block">Genehmigt</span>
-          <div class="text-base font-black text-emerald-400 mt-0.5">${approvedHours.toFixed(1)} Std.</div>
-          <div class="text-[10px] text-slate-400 mt-0.5">Freigegeben</div>
+          <span class="text-[10px] text-emerald-400 font-bold uppercase block truncate">${t('stat_approved_month', 'Genehmigt (Monat)')}</span>
+          <div class="text-base font-black text-emerald-400 mt-0.5">${approvedHoursCurrentMonth.toFixed(1)} Std.</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">${formatMonthYear(appState.selectedMonth)}</div>
         </div>
 
+        <!-- 3. Work Days Current Month -->
         <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-amber-400 font-bold uppercase block">Ausstehend</span>
-          <div class="text-base font-black text-amber-300 mt-0.5">${Math.max(0, totalWorkedHours - approvedHours).toFixed(1)} Std.</div>
-          <div class="text-[10px] text-slate-400 mt-0.5">Zur Prüfung</div>
+          <span class="text-[10px] text-blue-400 font-bold uppercase block truncate">${t('stat_work_days_month', 'Arbeitstage (Monat)')}</span>
+          <div class="text-base font-black text-blue-300 mt-0.5">${workDaysCurrentMonth} Tage</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">${t('this_month', 'im Monat')}</div>
         </div>
 
+        <!-- 4. Pending Hours -->
         <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-blue-400 font-bold uppercase block">Arbeitstage</span>
-          <div class="text-base font-black text-blue-300 mt-0.5">${new Set(filteredShifts.map(s => s.date)).size} Tage</div>
-          <div class="text-[10px] text-slate-400 mt-0.5">im Monat</div>
+          <span class="text-[10px] text-amber-400 font-bold uppercase block truncate">${t('stat_pending_hours', 'Ausstehend (Std.)')}</span>
+          <div class="text-base font-black text-amber-300 mt-0.5">${pendingHoursMonth.toFixed(1)} Std.</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">${pendingCount} ${t('under_review', 'Zur Prüfung')}</div>
         </div>
       </div>
 
       ${canApprove && pendingCount > 0 ? `
         <div class="bg-amber-950/40 border border-amber-800/60 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
           <div>
-            <div class="text-xs font-bold text-amber-300">🟡 ${pendingCount} ausstehende Schichten</div>
+            <div class="text-xs font-bold text-amber-300">🟡 ${pendingCount} ${t('pending_approval_notice', 'ausstehende Schichten zur Prüfung')}</div>
             <div class="text-[11px] text-amber-400/80">Freigabe für Monatsbericht & Lohn erforderlich</div>
           </div>
           <button onclick="handleApproveAllShifts()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold active-press shadow-md transition">
-            Alle genehmigen
+            ${t('approve_all', 'Alle genehmigen')}
           </button>
         </div>
       ` : ''}
 
-      <!-- TABLE-LIKE CONTENT (Each Day, Status & Week Separators) -->
+      <!-- TABLE & GROUPED DAYS CONTENT -->
       <div class="rounded-2xl border border-[#262626] bg-[#121212] overflow-hidden shadow-xl">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr class="bg-[#1a1a1a] text-[#aaa] border-b border-[#282828] font-bold uppercase tracking-wider text-[10px]">
-                <th class="py-2.5 px-3">Datum / Tag</th>
-                ${selectedWorkerId === 'all' ? '<th class="py-2.5 px-3">Mitarbeiter</th>' : ''}
-                <th class="py-2.5 px-3">Arbeitszeit</th>
-                <th class="py-2.5 px-3 text-center">Pause</th>
-                <th class="py-2.5 px-3 text-right">Stunden</th>
-                <th class="py-2.5 px-3 text-center">Status</th>
-                ${isSupervisor ? '<th class="py-2.5 px-3 text-right">Aktion</th>' : ''}
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-[#202020]">
-              ${(() => {
-                if (selectedWorkerId !== 'all') {
-                  // Single Worker View: Render full month days sequence with week demarcation!
-                  const rowsHtml = [];
-                  let currentKw = null;
-                  let weekSum = 0;
+        ${(() => {
+          if (selectedWorkerId !== 'all') {
+            // SINGLE WORKER VIEW: Month calendar with full day sequence & edit/delete options
+            const rowsHtml = [];
+            let currentKw = null;
 
-                  for (let d = 1; d <= daysInMonth; d++) {
-                    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    const dObj = new Date(year, month - 1, d);
-                    const dayOfWeek = dObj.getDay();
-                    const dayName = GERMAN_WEEKDAYS[dayOfWeek];
-                    const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-                    const kw = getWeekNumber(dObj);
+            for (let d = 1; d <= daysInMonth; d++) {
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+              const dObj = new Date(year, month - 1, d);
+              const dayOfWeek = dObj.getDay();
+              const dayName = GERMAN_WEEKDAYS[dayOfWeek];
+              const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+              const kw = getWeekNumber(dObj);
 
-                    // Insert Week Header on Monday or day 1
-                    if (kw !== currentKw) {
-                      currentKw = kw;
-                      rowsHtml.push(`
-                        <tr class="bg-gradient-to-r from-[#F5C000]/15 via-[#F5C000]/5 to-transparent border-y border-[#F5C000]/30 font-bold">
-                          <td colspan="${isSupervisor ? 6 : 5}" class="py-2 px-3">
-                            <div class="flex items-center justify-between text-[#F5C000] text-[11px]">
-                              <span class="flex items-center gap-1.5">
-                                <span>📅</span>
-                                <span>Kalenderwoche ${kw}</span>
-                              </span>
-                              <span class="text-[10px] text-slate-400 font-normal">Woche ${kw}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      `);
-                    }
+              if (kw !== currentKw) {
+                currentKw = kw;
+                rowsHtml.push(`
+                  <tr class="bg-gradient-to-r from-[#F5C000]/15 via-[#F5C000]/5 to-transparent border-y border-[#F5C000]/30 font-bold">
+                    <td colspan="${isLeader ? 7 : (isSupervisor ? 6 : 5)}" class="py-2 px-3">
+                      <div class="flex items-center justify-between text-[#F5C000] text-[11px]">
+                        <span class="flex items-center gap-1.5">
+                          <span>📅</span>
+                          <span>Kalenderwoche ${kw}</span>
+                        </span>
+                        <span class="text-[10px] text-slate-400 font-normal">Woche ${kw}</span>
+                      </div>
+                    </td>
+                  </tr>
+                `);
+              }
 
-                    const dayShifts = filteredShifts.filter(s => s.date === dateStr);
+              const dayShifts = filteredShifts.filter(s => s.date === dateStr);
 
-                    if (dayShifts.length > 0) {
-                      dayShifts.forEach(s => {
-                        rowsHtml.push(`
-                          <tr class="hover:bg-[#181818] transition ${isWeekend ? 'bg-[#151515]' : ''}">
-                            <td class="py-2.5 px-3 whitespace-nowrap">
-                              <div class="flex items-center gap-1.5">
-                                <span class="font-bold text-white">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
-                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isWeekend ? 'bg-amber-950/40 text-amber-300 border border-amber-800/40' : 'bg-[#262626] text-[#F5C000] border border-[#333]'}">
-                                  ${dayName}
-                                </span>
-                              </div>
-                            </td>
-                            <td class="py-2.5 px-3 whitespace-nowrap font-mono text-slate-200">
-                              ${s.startTime || s.start_time} - ${s.endTime || s.end_time}
-                              ${s.note ? `<div class="text-[10px] text-[#777] italic truncate max-w-[120px]">"${s.note}"</div>` : ''}
-                            </td>
-                            <td class="py-2.5 px-3 text-center whitespace-nowrap text-slate-400">
-                              ${(s.breakMinutes ?? s.break_minutes ?? 0) > 0 ? `${s.breakMinutes ?? s.break_minutes}m` : '-'}
-                            </td>
-                            <td class="py-2.5 px-3 text-right whitespace-nowrap font-bold ${s.status === 'approved' ? 'text-emerald-400' : 'text-[#F5C000]'}">
-                              ${(s.totalHours || s.total_hours || 0).toFixed(1)} Std.
-                            </td>
-                            <td class="py-2.5 px-3 text-center whitespace-nowrap">
-                              ${s.status === 'approved' 
-                                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 inline-flex items-center gap-1">🟢 Genehmigt</span>`
-                                : s.status === 'rejected'
-                                ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/70 text-red-400 border border-red-800/60 inline-flex items-center gap-1">🔴 Abgelehnt</span>`
-                                : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60 inline-flex items-center gap-1">🟡 Ausstehend</span>`}
-                            </td>
-                            ${isSupervisor ? `
-                              <td class="py-2.5 px-3 text-right whitespace-nowrap">
-                                ${s.status === 'pending' ? `
-                                  <div class="flex items-center justify-end gap-1">
-                                    <button onclick="handleApproveShift('${s.id}')" title="Genehmigen" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded-lg text-xs font-bold active-press">✓</button>
-                                    <button onclick="handleRejectShift('${s.id}')" title="Ablehnen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press">✕</button>
-                                  </div>
-                                ` : '<span class="text-slate-600 text-[10px]">—</span>'}
-                              </td>
-                            ` : ''}
-                          </tr>
-                        `);
-                      });
-                    } else if (appState.calendarStatusFilter === 'all') {
-                      // Empty day row
-                      rowsHtml.push(`
-                        <tr class="hover:bg-[#161616] transition opacity-70 ${isWeekend ? 'bg-[#131313]' : ''}">
-                          <td class="py-2 px-3 whitespace-nowrap">
-                            <div class="flex items-center gap-1.5">
-                              <span class="text-[#777]">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
-                              <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${isWeekend ? 'bg-slate-900 text-slate-500 border border-slate-800' : 'bg-[#1e1e1e] text-[#888]'}">
-                                ${dayName}
-                              </span>
-                            </div>
-                          </td>
-                          <td class="py-2 px-3 text-slate-600">—</td>
-                          <td class="py-2 px-3 text-center text-slate-600">—</td>
-                          <td class="py-2 px-3 text-right text-slate-600">—</td>
-                          <td class="py-2 px-3 text-center">
-                            <span class="text-slate-600 text-[10px] italic">${isWeekend ? 'Wochenende' : 'Frei'}</span>
-                          </td>
-                          ${isSupervisor ? '<td class="py-2 px-3 text-right text-slate-700">—</td>' : ''}
-                        </tr>
-                      `);
+              if (dayShifts.length > 0) {
+                dayShifts.forEach(s => {
+                  let photosCount = 0;
+                  if (s.media) {
+                    if (Array.isArray(s.media)) photosCount = s.media.length;
+                    else if (typeof s.media === 'string') {
+                      try { photosCount = (JSON.parse(s.media) || []).length; } catch(e) { photosCount = s.media ? 1 : 0; }
                     }
                   }
-                  return rowsHtml.join('');
-                } else {
-                  // All Workers View: Grouped by week & date
-                  if (filteredShifts.length === 0) {
-                    return `
-                      <tr>
-                        <td colspan="${isSupervisor ? 7 : 6}" class="p-8 text-center text-slate-500">
-                          Keine Schichten für diesen Monat gefunden. Tippe auf "+ Schicht eintragen", um Daten manuell einzufügen.
+
+                  rowsHtml.push(`
+                    <tr class="hover:bg-[#181818] transition ${isWeekend ? 'bg-[#151515]' : ''}">
+                      <td class="py-2.5 px-3 whitespace-nowrap">
+                        <div class="flex items-center gap-1.5">
+                          <span class="font-bold text-white">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
+                          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isWeekend ? 'bg-amber-950/40 text-amber-300 border border-amber-800/40' : 'bg-[#262626] text-[#F5C000] border border-[#333]'}">
+                            ${dayName}
+                          </span>
+                        </div>
+                      </td>
+                      <td class="py-2.5 px-3 whitespace-nowrap font-mono text-slate-200">
+                        <div>${s.startTime || s.start_time} - ${s.endTime || s.end_time}</div>
+                        ${s.note ? `<div class="text-[10px] text-[#777] italic truncate max-w-[140px]">"${s.note}"</div>` : ''}
+                        ${photosCount > 0 ? `
+                          <button onclick="openShiftMediaViewer('${s.id}')" class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-950/70 border border-blue-700/60 text-blue-300 text-[10px] font-bold hover:bg-blue-900 transition">
+                            <span>📷</span> <span>${photosCount} Fotos</span>
+                          </button>
+                        ` : ''}
+                      </td>
+                      <td class="py-2.5 px-3 text-center whitespace-nowrap text-slate-400">
+                        ${(s.breakMinutes ?? s.break_minutes ?? 0) > 0 ? `${s.breakMinutes ?? s.break_minutes}m` : '-'}
+                      </td>
+                      <td class="py-2.5 px-3 text-right whitespace-nowrap font-bold ${s.status === 'approved' ? 'text-emerald-400' : 'text-[#F5C000]'}">
+                        ${(s.totalHours || s.total_hours || 0).toFixed(1)} Std.
+                      </td>
+                      <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                        ${s.status === 'approved' 
+                          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 inline-flex items-center gap-1">🟢 Genehmigt</span>`
+                          : s.status === 'rejected'
+                          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/70 text-red-400 border border-red-800/60 inline-flex items-center gap-1">🔴 Abgelehnt</span>`
+                          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60 inline-flex items-center gap-1">🟡 Ausstehend</span>`}
+                      </td>
+                      ${(isLeader || isSupervisor) ? `
+                        <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                          <div class="flex items-center justify-end gap-1.5">
+                            ${isSupervisor && s.status === 'pending' ? `
+                              <button onclick="handleApproveShift('${s.id}')" title="Genehmigen" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded-lg text-xs font-bold active-press">✓</button>
+                              <button onclick="handleRejectShift('${s.id}')" title="Ablehnen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press">✕</button>
+                            ` : ''}
+                            ${isLeader ? `
+                              <button onclick="openEditShiftModal('${s.id}')" title="Bearbeiten" class="bg-blue-600/80 hover:bg-blue-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">✏️</button>
+                              <button onclick="handleDeleteShift('${s.id}')" title="Löschen" class="bg-red-600/80 hover:bg-red-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">🗑️</button>
+                            ` : ''}
+                          </div>
                         </td>
-                      </tr>
+                      ` : ''}
+                    </tr>
+                  `);
+                });
+              } else if (appState.calendarStatusFilter === 'all') {
+                rowsHtml.push(`
+                  <tr class="hover:bg-[#161616] transition opacity-70 ${isWeekend ? 'bg-[#131313]' : ''}">
+                    <td class="py-2 px-3 whitespace-nowrap">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-[#777]">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
+                        <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${isWeekend ? 'bg-slate-900 text-slate-500 border border-slate-800' : 'bg-[#1e1e1e] text-[#888]'}">
+                          ${dayName}
+                        </span>
+                      </div>
+                    </td>
+                    <td class="py-2 px-3 text-slate-600">—</td>
+                    <td class="py-2 px-3 text-center text-slate-600">—</td>
+                    <td class="py-2 px-3 text-right text-slate-600">—</td>
+                    <td class="py-2 px-3 text-center">
+                      <span class="text-slate-600 text-[10px] italic">${isWeekend ? 'Wochenende' : 'Frei'}</span>
+                    </td>
+                    ${(isLeader || isSupervisor) ? '<td class="py-2 px-3 text-right text-slate-700">—</td>' : ''}
+                  </tr>
+                `);
+              }
+            }
+
+            return `
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="bg-[#1a1a1a] text-[#aaa] border-b border-[#282828] font-bold uppercase tracking-wider text-[10px]">
+                      <th class="py-2.5 px-3">${t('col_date', 'Datum / Tag')}</th>
+                      <th class="py-2.5 px-3">${t('col_time', 'Arbeitszeit')}</th>
+                      <th class="py-2.5 px-3 text-center">${t('col_break', 'Pause')}</th>
+                      <th class="py-2.5 px-3 text-right">${t('col_hours', 'Stunden')}</th>
+                      <th class="py-2.5 px-3 text-center">${t('col_status', 'Status')}</th>
+                      ${(isLeader || isSupervisor) ? `<th class="py-2.5 px-3 text-right">${t('col_actions', 'Aktion')}</th>` : ''}
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-[#202020]">
+                    ${rowsHtml.join('')}
+                  </tbody>
+                </table>
+              </div>
+            `;
+          } else {
+            // ALL WORKERS DEFAULT VIEW: Group shifts by Day into Collapsible Rows (Requirement 6)
+            if (filteredShifts.length === 0) {
+              return `
+                <div class="p-8 text-center text-slate-500 text-xs">
+                  ${t('no_shifts_month', 'Keine Schichten für diesen Monat gefunden. Tippe auf "+ Schicht eintragen", um Daten manuell einzufügen.')}
+                </div>
+              `;
+            }
+
+            // Group shifts by date (YYYY-MM-DD)
+            const groupedByDate = {};
+            filteredShifts.forEach(s => {
+              if (!groupedByDate[s.date]) groupedByDate[s.date] = [];
+              groupedByDate[s.date].push(s);
+            });
+
+            // Sort dates descending
+            const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
+            let currentKw = null;
+
+            return `
+              <div class="divide-y divide-[#202020]">
+                ${sortedDates.map(dateStr => {
+                  const dayShifts = groupedByDate[dateStr];
+                  const dParts = dateStr.split('-');
+                  const dObj = new Date(parseInt(dParts[0]), parseInt(dParts[1]) - 1, parseInt(dParts[2]));
+                  const dayOfWeek = dObj.getDay();
+                  const dayName = GERMAN_WEEKDAYS[dayOfWeek];
+                  const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+                  const kw = getWeekNumber(dObj);
+
+                  // Unique workers on this day
+                  const workerIdsOnDay = Array.from(new Set(dayShifts.map(s => s.workerId || s.worker_id)));
+                  const dayTotalHours = dayShifts.reduce((sum, s) => sum + (parseFloat(s.totalHours ?? s.total_hours) || 0), 0);
+                  
+                  // Collect comments
+                  const notesList = dayShifts.map(s => s.note).filter(n => n && n.trim() && n !== 'Live timer shift');
+                  const firstNote = notesList.length > 0 ? notesList[0] : (dayShifts[0]?.note || '');
+
+                  // Collect day media
+                  const dayMedia = [];
+                  dayShifts.forEach(s => {
+                    if (s.media) {
+                      if (Array.isArray(s.media)) dayMedia.push(...s.media);
+                      else if (typeof s.media === 'string') {
+                        try {
+                          const parsed = JSON.parse(s.media);
+                          if (Array.isArray(parsed)) dayMedia.push(...parsed);
+                          else dayMedia.push(s.media);
+                        } catch(e) {
+                          dayMedia.push(s.media);
+                        }
+                      }
+                    }
+                  });
+
+                  // Status summary
+                  const allApproved = dayShifts.every(s => s.status === 'approved');
+                  const hasPending = dayShifts.some(s => s.status === 'pending');
+                  const hasRejected = dayShifts.some(s => s.status === 'rejected');
+
+                  // Expansion state: default open (or user toggle)
+                  const isExpanded = appState.expandedCalendarDays[dateStr] ?? true;
+
+                  let weekHeader = '';
+                  if (kw !== currentKw) {
+                    currentKw = kw;
+                    weekHeader = `
+                      <div class="bg-gradient-to-r from-[#F5C000]/15 via-[#F5C000]/5 to-transparent px-4 py-2 border-y border-[#F5C000]/30 font-bold text-[#F5C000] text-xs flex items-center justify-between">
+                        <span>📅 Kalenderwoche ${kw}</span>
+                        <span class="text-[10px] text-slate-400 font-normal">Woche ${kw}</span>
+                      </div>
                     `;
                   }
 
-                  let currentKw = null;
-                  const sortedShifts = [...filteredShifts].sort((a, b) => b.date.localeCompare(a.date));
-
-                  return sortedShifts.map(s => {
-                    const w = getWorker(s.workerId || s.worker_id);
-                    const dParts = s.date.split('-');
-                    const dObj = new Date(parseInt(dParts[0]), parseInt(dParts[1]) - 1, parseInt(dParts[2]));
-                    const dayOfWeek = dObj.getDay();
-                    const dayName = GERMAN_WEEKDAYS[dayOfWeek];
-                    const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
-                    const kw = getWeekNumber(dObj);
-
-                    let weekHeader = '';
-                    if (kw !== currentKw) {
-                      currentKw = kw;
-                      weekHeader = `
-                        <tr class="bg-gradient-to-r from-[#F5C000]/15 via-[#F5C000]/5 to-transparent border-y border-[#F5C000]/30 font-bold">
-                          <td colspan="${isSupervisor ? 7 : 6}" class="py-2 px-3 text-[#F5C000] text-[11px]">
-                            📅 Kalenderwoche ${kw}
-                          </td>
-                        </tr>
-                      `;
-                    }
-
-                    return `
-                      ${weekHeader}
-                      <tr class="hover:bg-[#181818] transition">
-                        <td class="py-2.5 px-3 whitespace-nowrap">
+                  return `
+                    ${weekHeader}
+                    <div class="border-b border-[#222]">
+                      <!-- Main Collapsible Day Header Row -->
+                      <div onclick="toggleCalendarDay('${dateStr}')" 
+                        class="p-3 bg-[#161616] hover:bg-[#1a1a1a] cursor-pointer transition flex flex-wrap items-center justify-between gap-2 select-none">
+                        
+                        <!-- Left: Date & Workers Summary -->
+                        <div class="flex items-center gap-2.5">
+                          <button type="button" class="text-slate-400 hover:text-white text-xs transition transform ${isExpanded ? 'rotate-90' : ''}">
+                            ▶
+                          </button>
+                          
                           <div class="flex items-center gap-1.5">
-                            <span class="font-bold text-white">${dParts[2]}.${dParts[1]}.</span>
+                            <span class="font-black text-white text-sm">${dParts[2]}.${dParts[1]}.</span>
                             <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isWeekend ? 'bg-amber-950/40 text-amber-300 border border-amber-800/40' : 'bg-[#262626] text-[#F5C000] border border-[#333]'}">
                               ${dayName}
                             </span>
                           </div>
-                        </td>
-                        <td class="py-2.5 px-3 whitespace-nowrap">
-                          <span class="font-bold text-white">${w ? w.name : 'Mitarbeiter'}</span>
-                        </td>
-                        <td class="py-2.5 px-3 whitespace-nowrap font-mono text-slate-200">
-                          ${s.startTime || s.start_time} - ${s.endTime || s.end_time}
-                          ${s.note ? `<div class="text-[10px] text-[#777] italic truncate max-w-[120px]">"${s.note}"</div>` : ''}
-                        </td>
-                        <td class="py-2.5 px-3 text-center whitespace-nowrap text-slate-400">
-                          ${(s.breakMinutes ?? s.break_minutes ?? 0) > 0 ? `${s.breakMinutes ?? s.break_minutes}m` : '-'}
-                        </td>
-                        <td class="py-2.5 px-3 text-right whitespace-nowrap font-bold ${s.status === 'approved' ? 'text-emerald-400' : 'text-[#F5C000]'}">
-                          ${(s.totalHours || s.total_hours || 0).toFixed(1)} Std.
-                        </td>
-                        <td class="py-2.5 px-3 text-center whitespace-nowrap">
-                          ${s.status === 'approved' 
-                            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 inline-flex items-center gap-1">🟢 Genehmigt</span>`
-                            : s.status === 'rejected'
-                            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/70 text-red-400 border border-red-800/60 inline-flex items-center gap-1">🔴 Abgelehnt</span>`
-                            : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60 inline-flex items-center gap-1">🟡 Ausstehend</span>`}
-                        </td>
-                        ${isSupervisor ? `
-                          <td class="py-2.5 px-3 text-right whitespace-nowrap">
-                            ${s.status === 'pending' ? `
-                              <div class="flex items-center justify-end gap-1">
-                                <button onclick="handleApproveShift('${s.id}')" title="Genehmigen" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded-lg text-xs font-bold active-press">✓</button>
-                                <button onclick="handleRejectShift('${s.id}')" title="Ablehnen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press">✕</button>
+
+                          <div class="flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700/60 text-xs font-bold text-slate-200">
+                            <span>👷</span> <span>${workerIdsOnDay.length} ${t('workers_count', 'Arbeiter')}</span>
+                          </div>
+                        </div>
+
+                        <!-- Center: Total Hours & Comments -->
+                        <div class="flex items-center gap-3">
+                          <div class="text-xs font-black ${allApproved ? 'text-emerald-400' : 'text-[#F5C000]'}">
+                            ${dayTotalHours.toFixed(1)} Std.
+                          </div>
+
+                          ${firstNote ? `
+                            <div class="hidden sm:block text-[11px] text-[#888] italic truncate max-w-[160px]" title="${firstNote}">
+                              💬 "${firstNote}"
+                            </div>
+                          ` : ''}
+
+                          <!-- Media button (if photos uploaded) -->
+                          ${dayMedia.length > 0 ? `
+                            <button onclick="event.stopPropagation(); openDateMediaViewer('${dateStr}')" 
+                              class="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-950/70 hover:bg-blue-900 border border-blue-700/60 text-blue-300 text-[11px] font-bold active-press shadow-sm transition">
+                              <span>📷</span> <span>${dayMedia.length} ${t('show_photos', 'Fotos')}</span>
+                            </button>
+                          ` : ''}
+
+                          <!-- Status Pill -->
+                          <div>
+                            ${allApproved ? `
+                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60">
+                                🟢 ${t('status_approved', 'Genehmigt')}
+                              </span>
+                            ` : hasPending ? `
+                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60">
+                                🟡 ${dayShifts.filter(s => s.status === 'pending').length} ${t('status_pending', 'Ausstehend')}
+                              </span>
+                            ` : `
+                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/70 text-red-400 border border-red-800/60">
+                                🔴 ${t('status_rejected', 'Abgelehnt')}
+                              </span>
+                            `}
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Collapsible Breakdown of individual worker shifts on this day -->
+                      ${isExpanded ? `
+                        <div class="bg-[#101010] p-2 space-y-2 border-t border-[#1e1e1e]">
+                          ${dayShifts.map(s => {
+                            const w = getWorker(s.workerId || s.worker_id);
+                            let shiftPhotos = 0;
+                            if (s.media) {
+                              if (Array.isArray(s.media)) shiftPhotos = s.media.length;
+                              else if (typeof s.media === 'string') {
+                                try { shiftPhotos = (JSON.parse(s.media) || []).length; } catch(e) { shiftPhotos = s.media ? 1 : 0; }
+                              }
+                            }
+
+                            return `
+                              <div class="bg-[#181818] border border-[#262626] rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 hover:border-[#383838] transition">
+                                <div class="flex items-center gap-2.5 min-w-0">
+                                  <div class="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-xs font-bold text-[#F5C000] flex-shrink-0">
+                                    👷
+                                  </div>
+                                  <div class="min-w-0">
+                                    <div class="text-xs font-bold text-white truncate">${w ? w.name : 'Mitarbeiter'}</div>
+                                    <div class="text-[11px] font-mono text-slate-300">
+                                      ${s.startTime || s.start_time} - ${s.endTime || s.end_time} 
+                                      <span class="text-slate-500">• Pause: ${(s.breakMinutes ?? s.break_minutes ?? 0)}m</span>
+                                    </div>
+                                    ${s.note ? `<div class="text-[10px] text-[#777] italic truncate max-w-[200px]">"${s.note}"</div>` : ''}
+                                  </div>
+                                </div>
+
+                                <div class="flex items-center gap-2.5 flex-shrink-0">
+                                  <div class="text-right">
+                                    <div class="text-xs font-extrabold ${s.status === 'approved' ? 'text-emerald-400' : 'text-[#F5C000]'}">
+                                      ${(s.totalHours || s.total_hours || 0).toFixed(1)} Std.
+                                    </div>
+                                    <div class="text-[9px] uppercase font-bold text-slate-400">
+                                      ${s.status === 'approved' ? '🟢 Genehmigt' : s.status === 'rejected' ? '🔴 Abgelehnt' : '🟡 Ausstehend'}
+                                    </div>
+                                  </div>
+
+                                  ${shiftPhotos > 0 ? `
+                                    <button onclick="openShiftMediaViewer('${s.id}')" class="p-1 px-2 rounded-lg bg-blue-950/70 border border-blue-700/60 text-blue-300 text-[10px] font-bold hover:bg-blue-900 transition flex items-center gap-1">
+                                      <span>📷</span> <span>${shiftPhotos}</span>
+                                    </button>
+                                  ` : ''}
+
+                                  <!-- Actions: Supervisor Approve/Reject & Leader Edit/Delete -->
+                                  <div class="flex items-center gap-1 border-l border-[#282828] pl-2">
+                                    ${isSupervisor && s.status === 'pending' ? `
+                                      <button onclick="handleApproveShift('${s.id}')" title="Genehmigen" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">✓</button>
+                                      <button onclick="handleRejectShift('${s.id}')" title="Ablehnen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">✕</button>
+                                    ` : ''}
+                                    ${isLeader ? `
+                                      <button onclick="openEditShiftModal('${s.id}')" title="Bearbeiten" class="bg-blue-600/80 hover:bg-blue-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">✏️</button>
+                                      <button onclick="handleDeleteShift('${s.id}')" title="Löschen" class="bg-red-600/80 hover:bg-red-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">🗑️</button>
+                                    ` : ''}
+                                  </div>
+                                </div>
                               </div>
-                            ` : '<span class="text-slate-600 text-[10px]">—</span>'}
-                          </td>
-                        ` : ''}
-                      </tr>
-                    `;
-                  }).join('');
-                }
-              })()}
-            </tbody>
-          </table>
-        </div>
+                            `;
+                          }).join('')}
+                        </div>
+                      ` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          }
+        })()}
       </div>
 
     </div>
@@ -2214,8 +3094,9 @@ function renderPayments() {
   const workerFilter = isWorker ? user.id : appState.paymentWorkerFilter;
   const fin = calculateGlobalFinancials(workerFilter);
 
-  const filteredPayments = appData.payments.filter(p => {
-    if (workerFilter !== 'all' && p.workerId !== workerFilter) return false;
+  const filteredPayments = (appData.payments || []).filter(p => {
+    const wid = p.workerId || p.worker_id;
+    if (workerFilter !== 'all' && wid !== workerFilter) return false;
     return true;
   });
 
@@ -2225,7 +3106,7 @@ function renderPayments() {
         <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 flex items-center justify-between">
           <label class="text-xs font-semibold text-slate-300">Filter Worker Balance:</label>
           <select onchange="appState.paymentWorkerFilter=this.value; renderApp();" class="bg-slate-900 text-white text-xs border border-slate-700 rounded-xl px-3 py-1.5 focus:outline-none">
-            <option value="all" ${appState.paymentWorkerFilter === 'all' ? 'selected' : ''}>All Workers</option>
+            <option value="all" ${appState.paymentWorkerFilter === 'all' ? 'selected' : ''}>${t('all_workers', 'Alle Mitarbeiter')}</option>
             ${appData.workers.filter(w => w.role === 'worker').map(w => `<option value="${w.id}" ${appState.paymentWorkerFilter === w.id ? 'selected' : ''}>${w.name}</option>`).join('')}
           </select>
         </div>
@@ -2239,7 +3120,7 @@ function renderPayments() {
           ${isLeader ? `
             <button onclick="openModal('logPayment')" 
               class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active-press text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-md">
-              <span>+ Log Payment</span>
+              <span>+ ${t('log_payment', 'Auszahlung erfassen')}</span>
             </button>
           ` : ''}
         </div>
@@ -2252,7 +3133,7 @@ function renderPayments() {
             </div>
 
             <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700">
-              <span class="text-[10px] text-slate-300 uppercase font-bold block">Arbeiterlohn</span>
+              <span class="text-[10px] text-slate-300 uppercase font-bold block">${t('total_earned', 'Arbeiterlohn')}</span>
               <span class="text-sm font-black text-slate-200 mt-0.5 block truncate">${formatCurrency(fin.totalWorkerEarned)}</span>
             </div>
 
@@ -2274,29 +3155,29 @@ function renderPayments() {
             </div>
 
             <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">Bereits bezahlt</span>
+              <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Bereits bezahlt')}</span>
               <span class="text-sm font-bold text-blue-400 mt-0.5 block truncate">${formatCurrency(fin.totalPaid)}</span>
             </div>
 
             <div class="p-2 rounded-xl ${fin.supervisorBalance > 0 ? 'bg-emerald-950/60 border border-emerald-800/50' : 'bg-slate-800/50'}">
-              <span class="text-[10px] text-emerald-300 uppercase font-bold block">Noch offen</span>
+              <span class="text-[10px] text-emerald-300 uppercase font-bold block">${t('balance_remaining', 'Noch offen')}</span>
               <span class="text-base font-extrabold ${fin.supervisorBalance > 0 ? 'text-emerald-400' : 'text-slate-300'} mt-0.5 block truncate">${formatCurrency(fin.supervisorBalance)}</span>
             </div>
           </div>
         ` : `
           <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-700/60 text-center">
             <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">Dein Verdienst</span>
+              <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_earned', 'Dein Verdienst')}</span>
               <span class="text-sm font-bold text-white mt-0.5 block truncate">${formatCurrency(fin.totalWorkerEarned)}</span>
             </div>
 
             <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">Erhalten</span>
+              <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Erhalten')}</span>
               <span class="text-sm font-bold text-blue-400 mt-0.5 block truncate">${formatCurrency(fin.totalPaid)}</span>
             </div>
 
             <div class="p-2 rounded-xl ${fin.workerBalance > 0 ? 'bg-emerald-950/60 border border-emerald-800/50' : 'bg-slate-800/50'}">
-              <span class="text-[10px] text-emerald-300 uppercase font-bold block">Offener Lohn</span>
+              <span class="text-[10px] text-emerald-300 uppercase font-bold block">${t('balance_remaining', 'Offener Lohn')}</span>
               <span class="text-base font-extrabold ${fin.workerBalance > 0 ? 'text-emerald-400' : 'text-slate-300'} mt-0.5 block truncate">${formatCurrency(fin.workerBalance)}</span>
             </div>
           </div>
@@ -2349,19 +3230,19 @@ function renderPayments() {
                   <!-- 3 Stats Columns: Total Earned, Paid, To be paid -->
                   <div class="grid grid-cols-3 gap-2 bg-slate-900/60 border border-slate-700/40 rounded-xl p-2.5 text-center text-xs">
                     <div>
-                      <span class="text-[10px] text-slate-400 uppercase font-semibold block">Total Lohn</span>
+                      <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_earned', 'Total Lohn')}</span>
                       <span class="font-extrabold text-white text-xs block mt-0.5">${formatCurrency(wFin.workerEarned)}</span>
                       <span class="text-[9px] text-slate-500 block">${wFin.totalHours.toFixed(1)} Std.</span>
                     </div>
 
                     <div>
-                      <span class="text-[10px] text-slate-400 uppercase font-semibold block">Bezahlt</span>
+                      <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Bezahlt')}</span>
                       <span class="font-extrabold text-blue-400 text-xs block mt-0.5">${formatCurrency(wFin.totalPaid)}</span>
                       <span class="text-[9px] text-slate-500 block">${appData.payments.filter(p => (p.workerId === w.id || p.worker_id === w.id) && p.status === 'approved').length} Zahlungen</span>
                     </div>
 
                     <div>
-                      <span class="text-[10px] text-[#F5C000] uppercase font-bold block">Noch offen</span>
+                      <span class="text-[10px] text-[#F5C000] uppercase font-bold block">${t('balance_remaining', 'Noch offen')}</span>
                       <span class="font-black text-xs block mt-0.5 ${remaining > 0 ? 'text-emerald-400' : 'text-slate-400'}">${formatCurrency(remaining)}</span>
                       <span class="text-[9px] text-slate-500 block">Restbetrag</span>
                     </div>
@@ -2371,7 +3252,7 @@ function renderPayments() {
                     <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-700/40">
                       <button onclick="openModal('logPayment', '${w.id}')"
                         class="bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-[11px] active-press transition flex items-center gap-1 shadow-sm">
-                        <span>💵</span> <span>Auszahlung erfassen</span>
+                        <span>💵</span> <span>${t('log_payment', 'Auszahlung erfassen')}</span>
                       </button>
                     </div>
                   ` : ''}
@@ -2389,9 +3270,10 @@ function renderPayments() {
             No payment history recorded yet.
           </div>
         ` : filteredPayments.map(p => {
-          const worker = getWorker(p.workerId);
+          const wid = p.workerId || p.worker_id;
+          const worker = getWorker(wid);
           return `
-            <div class="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-4 shadow-sm">
+            <div class="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-4 shadow-sm space-y-3">
               <div class="flex items-start justify-between">
                 <div>
                   <div class="flex items-center gap-2">
@@ -2399,26 +3281,43 @@ function renderPayments() {
                     <span class="text-xs text-slate-400">• ${formatDate(p.date)}</span>
                   </div>
                   <div class="text-xs font-semibold text-slate-300 mt-1">
-                    Recipient: <span class="text-emerald-300">${p.receivedBy || worker?.name}</span>
+                    Empfänger: <span class="text-emerald-300">${p.receivedBy || worker?.name}</span>
                   </div>
                   <div class="text-[11px] text-slate-400 mt-0.5">
-                    Logged by: ${p.loggedBy || 'Leader'} ${p.comment ? `— "${p.comment}"` : ''}
+                    Erfasst von: ${p.loggedBy || 'Leader'} ${p.comment ? `— "${p.comment}"` : ''}
                   </div>
                 </div>
 
-                <div>
-                  ${p.status === 'approved' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">🟢 Approved</span>`
-                  : p.status === 'rejected' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50">🔴 Rejected</span>`
-                  : `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50">🟡 Pending Approval</span>`}
+                <div class="text-right">
+                  ${p.status === 'approved' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">🟢 Genehmigt</span>`
+                  : p.status === 'rejected' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50">🔴 Abgelehnt</span>`
+                  : `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50">🟡 Ausstehend</span>`}
                 </div>
               </div>
 
-              ${isSupervisor && p.status === 'pending' ? `
-                <div class="mt-3 pt-3 border-t border-slate-700/50 flex items-center justify-end gap-2">
-                  <button onclick="handleApprovePayment('${p.id}')" class="bg-emerald-600 text-white px-3.5 py-1 rounded-xl text-xs font-bold">Approve</button>
-                  <button onclick="handleRejectPayment('${p.id}')" class="bg-red-600 text-white px-3.5 py-1 rounded-xl text-xs font-bold">Reject</button>
+              <!-- Action Buttons: Details/Invoice, plus Approve/Reject if pending -->
+              <div class="pt-2 border-t border-slate-700/50 flex flex-wrap items-center justify-between gap-2">
+                <button onclick="openModal('paymentInvoice', '${p.id}')" 
+                  class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[#F5C000] px-3 py-1.5 rounded-xl text-xs font-bold active-press transition flex items-center gap-1.5 shadow-sm">
+                  <span>📄</span> <span>${t('payment_details_invoice', 'Beleg / Quittung')}</span>
+                </button>
+
+                <div class="flex items-center gap-2">
+                  <button onclick="downloadPaymentInvoicePdf('${p.id}')" title="Als PDF herunterladen" 
+                    class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl text-xs font-semibold active-press transition flex items-center gap-1">
+                    <span>📥</span> <span>PDF</span>
+                  </button>
+
+                  ${(isSupervisor || isLeader) && p.status === 'pending' ? `
+                    <button onclick="handleApprovePayment('${p.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold active-press transition">
+                      ${t('approve', 'Genehmigen')}
+                    </button>
+                    <button onclick="handleRejectPayment('${p.id}')" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold active-press transition">
+                      ${t('reject', 'Ablehnen')}
+                    </button>
+                  ` : ''}
                 </div>
-              ` : ''}
+              </div>
             </div>
           `;
         }).join('')}
@@ -2429,9 +3328,9 @@ function renderPayments() {
 
 function renderBottomNav() {
   const tabs = [
-    { id: 'home', label: 'Home', icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>` },
-    { id: 'calendar', label: 'Calendar', icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>` },
-    { id: 'payments', label: 'Payments', icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>` }
+    { id: 'home', label: t('nav_home', 'Übersicht'), icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>` },
+    { id: 'calendar', label: t('nav_calendar', 'Kalender'), icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>` },
+    { id: 'payments', label: t('nav_payments', 'Auszahlungen'), icon: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>` }
   ];
 
   return `
@@ -2768,7 +3667,7 @@ function renderModals() {
                 </div>
               </div>
 
-              <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-2 max-h-44 overflow-y-auto space-y-1.5">
+              <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-2 max-h-40 overflow-y-auto space-y-1.5">
                 ${crewWorkers.map((w, idx) => `
                   <label class="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-700/50 cursor-pointer transition select-none">
                     <div class="flex items-center gap-2.5">
@@ -2780,7 +3679,7 @@ function renderModals() {
                   </label>
                 `).join('')}
               </div>
-              <div class="flex items-center justify-between mt-1.5 text-[11px] text-slate-400 px-1">
+              <div class="flex items-center justify-between mt-1 text-[11px] text-slate-400 px-1">
                 <span id="manualWorkerCountBadge" class="font-semibold text-slate-300">1 von ${crewWorkers.length} ausgewählt</span>
                 <span class="text-emerald-400 text-[10px]">✓ Mehrfachauswahl aktiv</span>
               </div>
@@ -2791,25 +3690,37 @@ function renderModals() {
               <input type="date" name="date" value="${getTodayString()}" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
             </div>
 
+            <!-- Rounding Option Toggle (Requirement 2) -->
+            <label class="flex items-center justify-between p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 cursor-pointer">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🕒</span>
+                <div>
+                  <span class="text-xs font-bold text-white block">${t('round_toggle', '30-Minuten-Rundung aktivieren')}</span>
+                  <span class="text-[10px] text-slate-400 block">Rundet Beginn und Ende auf 30-Minuten-Intervalle</span>
+                </div>
+              </div>
+              <input type="checkbox" name="roundTimeToggle" checked onchange="updateManualHoursPreview()" class="w-4 h-4 rounded text-[#F5C000] bg-slate-900 border-slate-600 focus:ring-0 cursor-pointer">
+            </label>
+
             <div class="grid grid-cols-2 gap-2">
               <div>
                 <label class="text-xs font-semibold text-slate-300 block mb-1">Beginn</label>
                 <input type="time" name="startTime" id="manualStartTime" value="08:00" required 
-                  onchange="this.value = roundTimeTo30Minutes(this.value); updateManualHoursPreview();"
+                  onchange="updateManualHoursPreview();"
                   class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
               </div>
               <div>
                 <label class="text-xs font-semibold text-slate-300 block mb-1">Ende</label>
                 <input type="time" name="endTime" id="manualEndTime" value="16:30" required 
-                  onchange="this.value = roundTimeTo30Minutes(this.value); updateManualHoursPreview();"
+                  onchange="updateManualHoursPreview();"
                   class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
               </div>
             </div>
 
-            <!-- Live 30-min Rounding Helper Card -->
-            <div class="bg-slate-800/60 p-2.5 rounded-xl border border-slate-700 flex items-center justify-between text-xs">
+            <!-- Live Hours Preview -->
+            <div class="bg-slate-800/60 p-2 rounded-xl border border-slate-700 flex items-center justify-between text-xs">
               <span class="text-slate-400 flex items-center gap-1 text-[11px]">
-                <span>🕒</span> <span>30m Gerundet:</span>
+                <span>⏱️</span> <span>Berechnete Arbeitszeit:</span>
               </span>
               <span id="manualShiftHoursPreview" class="font-bold text-emerald-400 font-mono text-xs">8.0 Std. (08:00 - 16:30)</span>
             </div>
@@ -2824,6 +3735,28 @@ function renderModals() {
             <div>
               <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Baustelle</label>
               <input type="text" name="note" placeholder="z.B. Baustelle Neubau" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+            </div>
+
+            <!-- Media / Photos upload section (Requirement 5) -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-semibold text-slate-300">📷 ${t('upload_photos', 'Fotos hinzufügen (Tagesende)')}</label>
+                <span class="text-[10px] text-slate-400 font-mono">${(appState.manualShiftMedia || []).length} Fotos</span>
+              </div>
+              <input type="file" id="manualShiftFileInput" accept="image/*" multiple class="hidden" onchange="handleModalImageUpload(event, 'manualShift')">
+              <button type="button" onclick="document.getElementById('manualShiftFileInput').click()" class="w-full bg-slate-800 hover:bg-slate-750 border border-dashed border-slate-600 text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
+                <span>📷</span> <span>+ Fotos auswählen / aufnehmen</span>
+              </button>
+              ${(appState.manualShiftMedia || []).length > 0 ? `
+                <div class="flex items-center gap-2 mt-2 overflow-x-auto py-1">
+                  ${appState.manualShiftMedia.map((img, idx) => `
+                    <div class="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-600 flex-shrink-0 group">
+                      <img src="${img}" class="w-full h-full object-cover">
+                      <button type="button" onclick="removeModalImage('manualShift', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[10px] font-bold flex items-center justify-center">✕</button>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
             </div>
 
             <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
@@ -2907,6 +3840,15 @@ function renderModals() {
                 class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000] font-mono">
             </div>
 
+            <!-- Direct Approval Checkbox (Requirement 8) -->
+            <label class="flex items-center gap-2.5 p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 cursor-pointer">
+              <input type="checkbox" name="markApproved" checked class="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-600 focus:ring-0 cursor-pointer">
+              <div>
+                <span class="text-xs font-bold text-white block">${t('mark_approved_directly', 'Direkt als genehmigt buchen (vom Lohn abziehen)')}</span>
+                <span class="text-[10px] text-slate-400 block">Wird sofort vom Restbetrag des Arbeiters abgezogen</span>
+              </div>
+            </label>
+
             <div>
               <label class="text-xs font-semibold text-slate-300 block mb-1">Empfänger / Bestätigung</label>
               <input type="text" name="receivedBy" placeholder="Wer hat das Geld entgegengenommen?" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
@@ -2924,7 +3866,7 @@ function renderModals() {
 
             <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
               <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-              <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md active-press transition">
+              <button type="submit" id="savePaymentSubmitBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md active-press transition">
                 Zahlung buchen
               </button>
             </div>
@@ -2934,13 +3876,13 @@ function renderModals() {
     }
   }
 
-  // 6. Confirm Stop Timer Modal
+  // 6. Confirm Stop Timer Modal (Requirement 2 & 5)
   else if (modal === 'stopTimerConfirm' && appState.modalPayload) {
     const p = appState.modalPayload;
     modalContent = `
       <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">Stop Shift Timer</h3>
+          <h3 class="text-base font-bold text-white">Schicht beenden (Clock Out)</h3>
           <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
         </div>
 
@@ -2955,32 +3897,40 @@ function renderModals() {
               <span class="text-emerald-400 font-mono font-bold">${formatElapsedSeconds(p.elapsedSeconds)}</span>
             </div>
             <div class="pt-1 border-t border-slate-700/60 flex items-center justify-between text-[11px]">
-              <span class="text-slate-400">Clock Times:</span>
+              <span class="text-slate-400">Erfasste Stempelzeiten:</span>
               <span class="text-slate-300 font-mono">${p.rawStartTime} - ${p.rawEndTime}</span>
-            </div>
-            <div class="flex items-center justify-between text-[11px] font-semibold text-amber-300 bg-amber-950/40 px-2.5 py-1 rounded-xl border border-amber-800/40">
-              <span>🕒 30-min Rounded:</span>
-              <span class="font-mono font-bold text-white">${p.startTime} - ${p.endTime}</span>
             </div>
           </div>
 
+          <!-- Rounding Option Toggle Switch (Requirement 2) -->
+          <label class="flex items-center justify-between p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 cursor-pointer">
+            <div class="flex items-center gap-2">
+              <span class="text-sm">🕒</span>
+              <div>
+                <span class="text-xs font-bold text-white block">${t('round_toggle', '30-Minuten-Rundung aktivieren')}</span>
+                <span class="text-[10px] text-slate-400 block">${p.roundTime ? 'Rundet Start/Ende auf halbe Stunden' : 'Exakte Minuten verwenden'}</span>
+              </div>
+            </div>
+            <input type="checkbox" ${p.roundTime ? 'checked' : ''} onchange="toggleStopTimerRounding(this.checked)" class="w-4 h-4 rounded text-[#F5C000] bg-slate-900 border-slate-600 focus:ring-0 cursor-pointer">
+          </label>
+
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Start Time (30m)</label>
+              <label class="text-xs font-semibold text-slate-300 block mb-1">Startzeit</label>
               <input type="time" value="${p.startTime}" 
-                onchange="appState.modalPayload.startTime = roundTimeTo30Minutes(this.value); this.value = appState.modalPayload.startTime; updateStopTimerHours();"
+                onchange="appState.modalPayload.startTime = this.value; updateStopTimerHours();"
                 class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono">
             </div>
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">End Time (30m)</label>
+              <label class="text-xs font-semibold text-slate-300 block mb-1">Endzeit</label>
               <input type="time" value="${p.endTime}" 
-                onchange="appState.modalPayload.endTime = roundTimeTo30Minutes(this.value); this.value = appState.modalPayload.endTime; updateStopTimerHours();"
+                onchange="appState.modalPayload.endTime = this.value; updateStopTimerHours();"
                 class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono">
             </div>
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Deduct Break Minutes</label>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Pause abziehen (Minuten)</label>
             <input type="number" value="${p.breakMinutes}" min="0" max="240" step="5"
               oninput="appState.modalPayload.breakMinutes = this.value; updateStopTimerHours();"
               class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
@@ -2988,8 +3938,10 @@ function renderModals() {
 
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-semibold text-slate-300">Total Worked Hours</label>
-              <span class="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/40">30-min interval</span>
+              <label class="text-xs font-semibold text-slate-300">Geleistete Arbeitszeit</label>
+              <span class="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/40">
+                ${p.roundTime ? '30m Intervall' : 'Exakt'}
+              </span>
             </div>
             <input type="number" step="0.5" id="stopTimerHoursInput" value="${p.calculatedHours}" 
               onchange="appState.modalPayload.calculatedHours = parseFloat(this.value) || 0"
@@ -2997,21 +3949,305 @@ function renderModals() {
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Shift Note</label>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Baustelle</label>
             <input type="text" value="${p.note}" onchange="appState.modalPayload.note=this.value"
               class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+          </div>
+
+          <!-- Media / Photos upload section (Requirement 5) -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-semibold text-slate-300">📷 ${t('upload_photos', 'Fotos hinzufügen (Tagesende)')}</label>
+              <span class="text-[10px] text-slate-400 font-mono">${(p.media || []).length} Fotos</span>
+            </div>
+            <input type="file" id="clockoutMediaFileInput" accept="image/*" multiple class="hidden" onchange="handleModalImageUpload(event, 'stopTimerConfirm')">
+            <button type="button" onclick="document.getElementById('clockoutMediaFileInput').click()" class="w-full bg-slate-800 hover:bg-slate-750 border border-dashed border-slate-600 text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
+              <span>📷</span> <span>+ Fotos auswählen / aufnehmen</span>
+            </button>
+            ${(p.media || []).length > 0 ? `
+              <div class="flex items-center gap-2 mt-2 overflow-x-auto py-1">
+                ${p.media.map((img, idx) => `
+                  <div class="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-600 flex-shrink-0 group">
+                    <img src="${img}" class="w-full h-full object-cover">
+                    <button type="button" onclick="removeModalImage('stopTimerConfirm', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[10px] font-bold flex items-center justify-center">✕</button>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
           </div>
         </div>
 
         <div class="pt-3 flex justify-end gap-2">
-          <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
-          <button onclick="handleConfirmStopTimer()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Stop & Submit Shift</button>
+          <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
+          <button onclick="handleConfirmStopTimer()" id="stopTimerSubmitBtn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold active-press shadow-md transition">
+            ${t('stop_and_submit', 'Schicht abschließen & senden')}
+          </button>
         </div>
       </div>
     `;
   }
 
-  // 7. Server / Backend Config Modal
+  // 7. Edit Shift Modal (Requirement 1 & Leader Only)
+  else if (modal === 'editShift' && appState.modalPayload) {
+    const p = appState.modalPayload;
+    const crewWorkers = appData.workers.filter(w => w.role === 'worker');
+
+    modalContent = `
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h3 class="text-base font-bold text-white">✏️ Schicht bearbeiten</h3>
+            <p class="text-[11px] text-slate-400">Nur Leiter können Schichten anpassen oder löschen</p>
+          </div>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+        </div>
+
+        <form onsubmit="handleSaveEditedShift(event)" class="space-y-3.5">
+          <div>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Mitarbeiter</label>
+            <select name="workerId" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              ${crewWorkers.map(w => `<option value="${w.id}" ${w.id === p.workerId ? 'selected' : ''}>${w.name}</option>`).join('')}
+            </select>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Datum</label>
+            <input type="date" name="date" value="${p.date}" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs font-semibold text-slate-300 block mb-1">Beginn</label>
+              <input type="time" name="startTime" id="editStartTime" value="${p.startTime}" required 
+                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-300 block mb-1">Ende</label>
+              <input type="time" name="endTime" id="editEndTime" value="${p.endTime}" required 
+                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs font-semibold text-slate-300 block mb-1">Pause (Min.)</label>
+              <input type="number" name="breakMinutes" id="editBreakMinutes" value="${p.breakMinutes}" min="0" max="240" step="5"
+                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+            </div>
+
+            <div>
+              <label class="text-xs font-semibold text-slate-300 block mb-1">Status</label>
+              <select name="status" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+                <option value="pending" ${p.status === 'pending' ? 'selected' : ''}>🟡 Ausstehend</option>
+                <option value="approved" ${p.status === 'approved' ? 'selected' : ''}>🟢 Genehmigt</option>
+                <option value="rejected" ${p.status === 'rejected' ? 'selected' : ''}>🔴 Abgelehnt</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Baustelle</label>
+            <input type="text" name="note" value="${p.note}" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+          </div>
+
+          <!-- Photos in edit modal -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-semibold text-slate-300">📷 Fotos (${(p.media || []).length})</label>
+            </div>
+            <input type="file" id="editShiftFileInput" accept="image/*" multiple class="hidden" onchange="handleModalImageUpload(event, 'editShift')">
+            <button type="button" onclick="document.getElementById('editShiftFileInput').click()" class="w-full bg-slate-800 hover:bg-slate-750 border border-dashed border-slate-600 text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
+              <span>📷</span> <span>+ Fotos hinzufügen / ändern</span>
+            </button>
+            ${(p.media || []).length > 0 ? `
+              <div class="flex items-center gap-2 mt-2 overflow-x-auto py-1">
+                ${p.media.map((img, idx) => `
+                  <div class="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-600 flex-shrink-0">
+                    <img src="${img}" class="w-full h-full object-cover">
+                    <button type="button" onclick="removeModalImage('editShift', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[10px] font-bold flex items-center justify-center">✕</button>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="pt-3 border-t border-slate-800 flex justify-between gap-2">
+            <button type="button" onclick="handleDeleteShift('${p.id}'); closeModal();" class="bg-red-600/80 hover:bg-red-600 text-white px-3 py-2 rounded-xl text-xs font-bold active-press transition">
+              🗑️ Löschen
+            </button>
+
+            <div class="flex gap-2">
+              <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-3.5 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
+              <button type="submit" id="editShiftSubmitBtn" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2 rounded-xl text-xs font-bold active-press transition">
+                Speichern
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  // 8. Payment Invoice / Receipt Modal (Requirement 7)
+  else if (modal === 'paymentInvoice' && appState.modalPayload) {
+    const paymentId = appState.modalPayload;
+    const p = (appData.payments || []).find(x => x.id === paymentId) || (getLocalDb().payments || []).find(x => x.id === paymentId);
+    const wid = p ? (p.workerId || p.worker_id) : null;
+    const worker = wid ? getWorker(wid) : null;
+
+    modalContent = `
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md animate-slide-up space-y-4 max-h-[92vh] overflow-y-auto">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">📄</span>
+            <h3 class="text-base font-bold text-white">Zahlungsbeleg & Quittung</h3>
+          </div>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+        </div>
+
+        ${!p ? `
+          <div class="p-6 text-center text-slate-400 text-sm">Zahlung nicht gefunden</div>
+        ` : `
+          <!-- Printable Invoice / Receipt Box -->
+          <div class="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-4 space-y-4 shadow-inner text-slate-200">
+            <!-- Header Banner -->
+            <div class="border-b border-[#2a2a2a] pb-3 flex items-start justify-between">
+              <div>
+                <div class="text-lg font-black text-white leading-none">alles<span class="text-[#F5C000]">Bau</span></div>
+                <div class="text-[10px] text-slate-400 font-semibold mt-0.5">Bauunternehmen • Lohnverwaltung</div>
+              </div>
+              <div class="text-right">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === 'approved' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}">
+                  ${p.status === 'approved' ? '🟢 GENEHMIGT' : '🟡 AUSSTEHEND'}
+                </span>
+                <div class="text-[9px] font-mono text-slate-500 mt-1">#AB-PAY-${(p.id || '').replace('p_', '').toUpperCase()}</div>
+              </div>
+            </div>
+
+            <!-- Payee & Payment Info -->
+            <div class="grid grid-cols-2 gap-3 text-xs bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">Empfänger (Arbeitnehmer)</span>
+                <span class="font-bold text-white text-sm block mt-0.5">${worker ? worker.name : (p.receivedBy || 'Mitarbeiter')}</span>
+                <span class="text-[10px] text-slate-400 block">${worker ? `@${worker.username} • ID: ${worker.id}` : ''}</span>
+              </div>
+
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">Zahlungsdetails</span>
+                <span class="font-bold text-slate-200 block mt-0.5">${formatDate(p.date)}</span>
+                <span class="text-[10px] text-slate-400 block">Ausgezahlt: ${p.loggedBy || 'AllesBau'}</span>
+              </div>
+            </div>
+
+            <!-- Amount Highlight Box -->
+            <div class="bg-gradient-to-r from-amber-950/40 to-slate-900 border border-amber-800/60 rounded-xl p-3.5 text-center">
+              <span class="text-[10px] uppercase font-bold text-amber-300 block">Netto-Auszahlungsbetrag</span>
+              <div class="text-2xl font-black text-[#F5C000] mt-0.5">${formatCurrency(p.amount)}</div>
+              <div class="text-[11px] text-slate-300 mt-1 italic">
+                ${p.comment ? `Verwendungszweck: "${p.comment}"` : 'Reguläre Lohnabschlagszahlung'}
+              </div>
+            </div>
+
+            <!-- Confirmation Legal Text (German) -->
+            <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400 italic leading-relaxed">
+              Hiermit wird bestätigt, dass der oben genannte Auszahlungsbetrag ordnungsgemäß ausgezahlt und vom Empfänger vollständig erhalten wurde. Der Betrag wird mit dem bestehenden Lohnanspruch verrechnet.
+            </div>
+
+            <!-- Signature Boxes -->
+            <div class="grid grid-cols-2 gap-3 pt-2 text-[10px]">
+              <div class="border-t border-slate-600 pt-1.5 text-center">
+                <span class="font-bold text-slate-300 block">AllesBau (Arbeitgeber)</span>
+                <span class="text-slate-500 italic block mt-0.5">Unterschrift / Bestätigung</span>
+              </div>
+
+              <div class="border-t border-slate-600 pt-1.5 text-center">
+                <span class="font-bold text-slate-300 block">${worker ? worker.name : (p.receivedBy || 'Arbeitnehmer')}</span>
+                <span class="text-slate-500 italic block mt-0.5">Unterschrift des Empfängers</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="pt-2 flex flex-wrap items-center justify-between gap-2">
+            <button onclick="downloadPaymentInvoicePdf('${p.id}')" 
+              class="bg-[#F5C000] hover:bg-[#ffd333] text-black font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 active-press shadow-md transition">
+              <span>📥</span> <span>PDF Herunterladen</span>
+            </button>
+
+            <div class="flex items-center gap-2">
+              <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold active-press transition flex items-center gap-1">
+                <span>🖨️</span> <span>Drucken</span>
+              </button>
+              <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold">
+                Schließen
+              </button>
+            </div>
+          </div>
+        `}
+      </div>
+    `;
+  }
+
+  // 9. Media Viewer / Lightbox Modal (Requirement 5 & 6)
+  else if (modal === 'mediaViewer' && appState.modalPayload) {
+    const p = appState.modalPayload;
+    const images = Array.isArray(p.images) ? p.images : [];
+    const activeIndex = p.activeIndex || 0;
+    const currentImg = images[activeIndex] || images[0];
+
+    modalContent = `
+      <div class="bg-black/95 border border-slate-700 rounded-3xl p-4 w-full max-w-lg animate-slide-up space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📷</span>
+            <h3 class="text-sm font-bold text-white">${p.title || 'Fotos'}</h3>
+            <span class="text-xs text-slate-400">(${activeIndex + 1} / ${images.length})</span>
+          </div>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1 text-sm">✕</button>
+        </div>
+
+        ${images.length === 0 ? `
+          <div class="p-8 text-center text-slate-500 text-xs">Keine Fotos vorhanden</div>
+        ` : `
+          <!-- Main Full Photo Display -->
+          <div class="relative w-full max-h-[60vh] flex items-center justify-center bg-black rounded-2xl overflow-hidden border border-slate-800">
+            <img src="${currentImg}" class="max-w-full max-h-[58vh] object-contain rounded-xl">
+
+            ${images.length > 1 ? `
+              <button onclick="appState.modalPayload.activeIndex = (appState.modalPayload.activeIndex - 1 + ${images.length}) % ${images.length}; renderApp();"
+                class="absolute left-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white p-2 rounded-full border border-slate-600 transition">
+                ◀
+              </button>
+              <button onclick="appState.modalPayload.activeIndex = (appState.modalPayload.activeIndex + 1) % ${images.length}; renderApp();"
+                class="absolute right-2 top-1/2 -translate-y-1/2 bg-black/70 hover:bg-black text-white p-2 rounded-full border border-slate-600 transition">
+                ▶
+              </button>
+            ` : ''}
+          </div>
+
+          <!-- Thumbnails Strip -->
+          ${images.length > 1 ? `
+            <div class="flex items-center gap-2 overflow-x-auto py-1">
+              ${images.map((img, idx) => `
+                <button type="button" onclick="appState.modalPayload.activeIndex = ${idx}; renderApp();"
+                  class="w-14 h-14 rounded-lg overflow-hidden border-2 flex-shrink-0 transition ${idx === activeIndex ? 'border-[#F5C000] scale-105' : 'border-slate-700 opacity-60'}">
+                  <img src="${img}" class="w-full h-full object-cover">
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+        `}
+
+        <div class="pt-2 flex justify-end">
+          <button onclick="closeModal()" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-semibold">
+            Schließen
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // 10. Server / Backend Config Modal
   else if (modal === 'serverConfig') {
     const currentUrl = localStorage.getItem('allesbau_backend_url') || '';
     modalContent = `
@@ -3066,17 +4302,52 @@ function updateStopTimerHours() {
 }
 
 function updateManualHoursPreview() {
+  const form = document.querySelector('form[onsubmit="handleSaveManualShift(event)"]');
   const sInput = document.getElementById('manualStartTime');
   const eInput = document.getElementById('manualEndTime');
   const bInput = document.getElementById('manualBreakMinutes');
   const preview = document.getElementById('manualShiftHoursPreview');
   if (sInput && eInput && preview) {
-    const s = roundTimeTo30Minutes(sInput.value);
-    const e = roundTimeTo30Minutes(eInput.value);
+    const roundTime = form && form.roundTimeToggle ? form.roundTimeToggle.checked : true;
+    const s = roundTime ? roundTimeTo30Minutes(sInput.value) : sInput.value;
+    const e = roundTime ? roundTimeTo30Minutes(eInput.value) : eInput.value;
     const b = bInput ? parseInt(bInput.value) || 0 : 0;
     const hrs = calculateShiftHours(s, e, b);
-    preview.textContent = `${hrs.toFixed(1)} Std. (${s} - ${e})`;
+    preview.textContent = `${hrs.toFixed(1)} Std. (${s} - ${e})${roundTime ? ' [30m]' : ' [Exakt]'}`;
   }
+}
+
+async function handleModalImageUpload(event, modalType) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  showToast('Fotos werden verarbeitet... ⏳', 'info');
+  for (const f of files) {
+    try {
+      const base64 = await compressImageFile(f);
+      if (modalType === 'manualShift') {
+        appState.manualShiftMedia = appState.manualShiftMedia || [];
+        appState.manualShiftMedia.push(base64);
+      } else if (appState.modalPayload) {
+        appState.modalPayload.media = appState.modalPayload.media || [];
+        if (typeof appState.modalPayload.media === 'string') {
+          try { appState.modalPayload.media = JSON.parse(appState.modalPayload.media) || []; } catch(e) { appState.modalPayload.media = []; }
+        }
+        appState.modalPayload.media.push(base64);
+      }
+    } catch (e) {}
+  }
+  renderApp();
+}
+
+function removeModalImage(modalType, index) {
+  if (modalType === 'manualShift') {
+    if (appState.manualShiftMedia) appState.manualShiftMedia.splice(index, 1);
+  } else if (appState.modalPayload && appState.modalPayload.media) {
+    if (Array.isArray(appState.modalPayload.media)) {
+      appState.modalPayload.media.splice(index, 1);
+    }
+  }
+  renderApp();
 }
 
 function toggleAllManualShiftWorkers(checkAll) {
