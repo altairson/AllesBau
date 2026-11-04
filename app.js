@@ -1373,6 +1373,10 @@ async function handleConfirmStopTimer() {
     showToast(err.message, 'error');
   } finally {
     appState.isSubmitting = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = t('stop_and_submit', 'Schicht abschließen & senden');
+    }
   }
 }
 
@@ -1455,6 +1459,10 @@ async function handleSaveManualShift(e) {
     showToast(err.message, 'error');
   } finally {
     appState.isSubmitting = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = t('save_shift', 'Schicht erfassen');
+    }
   }
 }
 
@@ -1536,6 +1544,10 @@ async function handleSaveEditedShift(e) {
     showToast(err.message, 'error');
   } finally {
     appState.isSubmitting = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = t('save_changes', 'Speichern');
+    }
   }
 }
 
@@ -1645,6 +1657,10 @@ async function handleSavePayment(e) {
     showToast(err.message, 'error');
   } finally {
     appState.isSubmitting = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = t('record_payment', 'Zahlung buchen');
+    }
   }
 }
 

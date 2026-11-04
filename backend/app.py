@@ -7,7 +7,9 @@ import os
 import sqlite3
 import time
 import uuid
-import datetime
+import json
+import traceback
+from datetime import datetime
 import functools
 import hashlib
 from flask import Flask, request, jsonify, g, send_from_directory
@@ -55,6 +57,16 @@ def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DB_FILE)
         g.db.row_factory = sqlite3.Row
+        # Dynamic schema check on connection: ensure media column exists in shifts
+        try:
+            cur = g.db.cursor()
+            cur.execute("PRAGMA table_info(shifts)")
+            cols = [col[1] for col in cur.fetchall()]
+            if cols and 'media' not in cols:
+                cur.execute("ALTER TABLE shifts ADD COLUMN media TEXT DEFAULT ''")
+                g.db.commit()
+        except Exception:
+            pass
     return g.db
 
 @app.teardown_appcontext
@@ -94,20 +106,7 @@ def init_db():
         )
     ''')
 
-    # Ensure billing_rate column exists in users table for existing databases
-    c.execute("PRAGMA table_info(users)")
-    user_cols = [col[1] for col in c.fetchall()]
-    if 'billing_rate' not in user_cols:
-        c.execute("ALTER TABLE users ADD COLUMN billing_rate REAL DEFAULT 0.0")
-        c.execute("UPDATE users SET billing_rate = hourly_rate WHERE billing_rate = 0.0 OR billing_rate IS NULL")
-
-    # Ensure media column exists in shifts table for existing databases
-    c.execute("PRAGMA table_info(shifts)")
-    shift_cols = [col[1] for col in c.fetchall()]
-    if 'media' not in shift_cols:
-        c.execute("ALTER TABLE shifts ADD COLUMN media TEXT DEFAULT ''")
-
-    # Shifts Table
+    # Shifts Table (with media column included in base schema)
     c.execute('''
         CREATE TABLE IF NOT EXISTS shifts (
             id TEXT PRIMARY KEY,
@@ -121,6 +120,7 @@ def init_db():
             status TEXT DEFAULT 'pending',
             approved_by TEXT,
             note TEXT,
+            media TEXT DEFAULT '',
             updated_at INTEGER DEFAULT 0,
             FOREIGN KEY (crew_id) REFERENCES crews (id),
             FOREIGN KEY (worker_id) REFERENCES users (id)
@@ -159,6 +159,24 @@ def init_db():
             FOREIGN KEY (worker_id) REFERENCES users (id)
         )
     ''')
+
+    # Safe column migrations for existing databases
+    try:
+        c.execute("PRAGMA table_info(users)")
+        user_cols = [col[1] for col in c.fetchall()]
+        if 'billing_rate' not in user_cols:
+            c.execute("ALTER TABLE users ADD COLUMN billing_rate REAL DEFAULT 0.0")
+            c.execute("UPDATE users SET billing_rate = hourly_rate WHERE billing_rate = 0.0 OR billing_rate IS NULL")
+    except Exception as e:
+        print("User migration note:", e)
+
+    try:
+        c.execute("PRAGMA table_info(shifts)")
+        shift_cols = [col[1] for col in c.fetchall()]
+        if 'media' not in shift_cols:
+            c.execute("ALTER TABLE shifts ADD COLUMN media TEXT DEFAULT ''")
+    except Exception as e:
+        print("Shift migration note:", e)
 
     conn.commit()
     conn.close()
@@ -224,7 +242,7 @@ def verify_token(token):
         expected_sig = hashlib.sha256((f"{user_id}:{crew_id}:{role}:{timestamp}" + SECRET_KEY).encode('utf-8')).hexdigest()
         if sig != expected_sig:
             return None
-        return {"user_id": user_id, "crew_id": crew_id, "role": role}
+        return {"user_id": user_id, "id": user_id, "crew_id": crew_id, "role": role}
     except Exception:
         return None
 
@@ -583,10 +601,12 @@ def sync_crew_data():
 @app.route('/api/timers/start', methods=['POST'])
 @login_required
 def start_timer():
-    if g.user['role'] != 'leader':
-        return jsonify({"error": "Only leader can start timers"}), 403
-    
     worker_id = request.json.get('worker_id')
+    user_role = g.user.get('role', '')
+    user_id = g.user.get('user_id') or g.user.get('id')
+    if user_role not in ['leader', 'supervisor'] and user_id != worker_id:
+        return jsonify({"error": "Keine Berechtigung zum Starten dieses Timers"}), 403
+    
     now = int(time.time() * 1000)
     
     db = get_db()
@@ -600,10 +620,12 @@ def start_timer():
 @app.route('/api/timers/pause', methods=['POST'])
 @login_required
 def pause_timer():
-    if g.user['role'] != 'leader':
-        return jsonify({"error": "Only leader can pause timers"}), 403
-
     worker_id = request.json.get('worker_id')
+    user_role = g.user.get('role', '')
+    user_id = g.user.get('user_id') or g.user.get('id')
+    if user_role not in ['leader', 'supervisor'] and user_id != worker_id:
+        return jsonify({"error": "Keine Berechtigung zum Pausieren dieses Timers"}), 403
+
     db = get_db()
     timer = db.execute("SELECT * FROM timers WHERE worker_id = ?", (worker_id,)).fetchone()
     if not timer:
@@ -628,133 +650,153 @@ def pause_timer():
 @app.route('/api/timers/stop', methods=['POST'])
 @login_required
 def stop_timer():
-    data = request.json or {}
-    worker_id = data.get('worker_id')
-    if not worker_id:
-        return jsonify({"error": "Worker ID fehlt"}), 400
+    try:
+        data = request.json or {}
+        worker_id = data.get('worker_id') or data.get('workerId')
+        if not worker_id:
+            return jsonify({"error": "Worker ID fehlt"}), 400
 
-    # Allow worker to stop their own timer, or leader/supervisor to stop any crew timer
-    if g.user['role'] not in ['leader', 'supervisor'] and g.user['id'] != worker_id:
-        return jsonify({"error": "Keine Berechtigung zum Stoppen dieses Timers"}), 403
+        user_role = g.user.get('role', '')
+        user_id = g.user.get('user_id') or g.user.get('id')
+        # Allow worker to stop their own timer, or leader/supervisor to stop any crew timer
+        if user_role not in ['leader', 'supervisor'] and user_id != worker_id:
+            return jsonify({"error": "Keine Berechtigung zum Stoppen dieses Timers"}), 403
 
-    date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
-    round_time = data.get('round_time', True)
-    if round_time:
-        start_time_str = round_time_to_30_minutes(data.get('start_time'))
-        end_time_str = round_time_to_30_minutes(data.get('end_time'))
-    else:
-        start_time_str = str(data.get('start_time', '08:00')).strip()
-        end_time_str = str(data.get('end_time', '17:00')).strip()
+        date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
+        round_time = data.get('round_time', True)
+        if round_time:
+            start_time_str = round_time_to_30_minutes(data.get('start_time'))
+            end_time_str = round_time_to_30_minutes(data.get('end_time'))
+        else:
+            start_time_str = str(data.get('start_time', '08:00')).strip()
+            end_time_str = str(data.get('end_time', '17:00')).strip()
 
-    break_mins = int(data.get('break_minutes', 0))
-    total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time_str, end_time_str, break_mins)
-    note = data.get('note', 'Schicht über Live-Timer erfasst')
-    
-    # Properly serialize media array to JSON string for SQLite storage
-    raw_media = data.get('media', '')
-    if isinstance(raw_media, (list, dict)):
-        media = json.dumps(raw_media)
-    else:
-        media = str(raw_media or '')
+        break_mins = int(data.get('break_minutes', 0))
+        total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time_str, end_time_str, break_mins)
+        note = data.get('note', 'Schicht über Live-Timer erfasst')
+        
+        # Properly serialize media array to JSON string for SQLite storage
+        raw_media = data.get('media', '')
+        if isinstance(raw_media, (list, dict)):
+            media = json.dumps(raw_media)
+        else:
+            media = str(raw_media or '')
 
-    db = get_db()
-    # Double entry prevention
-    dup = db.execute("""
-        SELECT id FROM shifts 
-        WHERE crew_id = ? AND worker_id = ? AND date = ? AND start_time = ? AND end_time = ?
-    """, (g.user['crew_id'], worker_id, date_str, start_time_str, end_time_str)).fetchone()
-    if dup:
-        return jsonify({"error": "Doppelte Schicht: Für diesen Arbeiter existiert bereits eine Schicht zu dieser Zeit."}), 400
-
-    shift_id = "s_" + uuid.uuid4().hex[:10]
-    db.execute("""
-        INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, media, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-    """, (shift_id, g.user['crew_id'], worker_id, date_str, start_time_str, end_time_str, break_mins, total_hours, note, media, int(time.time())))
-    
-    db.execute("DELETE FROM timers WHERE worker_id = ?", (worker_id,))
-    db.commit()
-    return jsonify({"success": True, "shift_id": shift_id})
-
-@app.route('/api/shifts/manual', methods=['POST'])
-@login_required
-def add_manual_shift():
-    data = request.json or {}
-    worker_ids = data.get('worker_ids') or ([data.get('worker_id')] if data.get('worker_id') else [])
-    date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
-    round_time = data.get('round_time', True)
-    if round_time:
-        start_time = round_time_to_30_minutes(data.get('start_time'))
-        end_time = round_time_to_30_minutes(data.get('end_time'))
-    else:
-        start_time = str(data.get('start_time', '08:00')).strip()
-        end_time = str(data.get('end_time', '16:30')).strip()
-
-    break_mins = int(data.get('break_minutes', 0))
-    total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time, end_time, break_mins)
-    note = data.get('note', '')
-
-    raw_media = data.get('media', '')
-    if isinstance(raw_media, (list, dict)):
-        media = json.dumps(raw_media)
-    else:
-        media = str(raw_media or '')
-
-    db = get_db()
-    shift_ids = []
-    for worker_id in worker_ids:
-        # Check duplicate
+        db = get_db()
+        crew_id = g.user.get('crew_id')
+        # Double entry prevention
         dup = db.execute("""
             SELECT id FROM shifts 
             WHERE crew_id = ? AND worker_id = ? AND date = ? AND start_time = ? AND end_time = ?
-        """, (g.user['crew_id'], worker_id, date_str, start_time, end_time)).fetchone()
+        """, (crew_id, worker_id, date_str, start_time_str, end_time_str)).fetchone()
         if dup:
-            continue
+            return jsonify({"error": "Doppelte Schicht: Für diesen Arbeiter existiert bereits eine Schicht zu dieser Zeit."}), 400
 
         shift_id = "s_" + uuid.uuid4().hex[:10]
         db.execute("""
             INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, media, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-        """, (shift_id, g.user['crew_id'], worker_id, date_str, start_time, end_time, break_mins, total_hours, note, media, int(time.time())))
-        shift_ids.append(shift_id)
+        """, (shift_id, crew_id, worker_id, date_str, start_time_str, end_time_str, break_mins, total_hours, note, media, int(time.time())))
+        
+        db.execute("DELETE FROM timers WHERE worker_id = ?", (worker_id,))
+        db.commit()
+        return jsonify({"success": True, "shift_id": shift_id})
+    except Exception as e:
+        print("Error in stop_timer:", traceback.format_exc())
+        return jsonify({"error": f"Serverfehler beim Schichtende: {str(e)}"}), 500
 
-    db.commit()
-    if not shift_ids:
-        return jsonify({"error": "Für alle gewählten Mitarbeiter existieren bereits Schichten zu dieser Zeit."}), 400
-    return jsonify({"success": True, "shift_ids": shift_ids, "shift_id": shift_ids[0]})
+@app.route('/api/shifts/manual', methods=['POST'])
+@login_required
+def add_manual_shift():
+    try:
+        data = request.json or {}
+        worker_ids = data.get('worker_ids') or ([data.get('worker_id')] if data.get('worker_id') else ([data.get('workerId')] if data.get('workerId') else []))
+        if not worker_ids:
+            return jsonify({"error": "Bitte mindestens einen Mitarbeiter auswählen"}), 400
+
+        date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
+        round_time = data.get('round_time', True)
+        if round_time:
+            start_time = round_time_to_30_minutes(data.get('start_time'))
+            end_time = round_time_to_30_minutes(data.get('end_time'))
+        else:
+            start_time = str(data.get('start_time', '08:00')).strip()
+            end_time = str(data.get('end_time', '16:30')).strip()
+
+        break_mins = int(data.get('break_minutes', 0))
+        total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time, end_time, break_mins)
+        note = data.get('note', '')
+
+        raw_media = data.get('media', '')
+        if isinstance(raw_media, (list, dict)):
+            media = json.dumps(raw_media)
+        else:
+            media = str(raw_media or '')
+
+        db = get_db()
+        crew_id = g.user.get('crew_id')
+        shift_ids = []
+        for worker_id in worker_ids:
+            # Check duplicate
+            dup = db.execute("""
+                SELECT id FROM shifts 
+                WHERE crew_id = ? AND worker_id = ? AND date = ? AND start_time = ? AND end_time = ?
+            """, (crew_id, worker_id, date_str, start_time, end_time)).fetchone()
+            if dup:
+                continue
+
+            shift_id = "s_" + uuid.uuid4().hex[:10]
+            db.execute("""
+                INSERT INTO shifts (id, crew_id, worker_id, date, start_time, end_time, break_minutes, total_hours, status, note, media, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+            """, (shift_id, crew_id, worker_id, date_str, start_time, end_time, break_mins, total_hours, note, media, int(time.time())))
+            shift_ids.append(shift_id)
+
+        db.commit()
+        if not shift_ids:
+            return jsonify({"error": "Für alle gewählten Mitarbeiter existieren bereits Schichten zu dieser Zeit."}), 400
+        return jsonify({"success": True, "shift_ids": shift_ids, "shift_id": shift_ids[0]})
+    except Exception as e:
+        print("Error in add_manual_shift:", traceback.format_exc())
+        return jsonify({"error": f"Serverfehler bei manueller Schicht: {str(e)}"}), 500
 
 @app.route('/api/shifts/<shift_id>', methods=['PUT'])
 @login_required
 def edit_shift(shift_id):
-    if g.user['role'] != 'leader':
-        return jsonify({"error": "Only leaders can edit shifts"}), 403
+    try:
+        if g.user.get('role') != 'leader':
+            return jsonify({"error": "Only leaders can edit shifts"}), 403
 
-    data = request.json or {}
-    worker_id = data.get('worker_id') or data.get('workerId')
-    date_str = data.get('date')
-    start_time = data.get('start_time') or data.get('startTime')
-    end_time = data.get('end_time') or data.get('endTime')
-    break_mins = int(data.get('break_minutes', data.get('breakMinutes', 0)))
-    total_hours = float(data.get('total_hours', data.get('totalHours', 0.0))) or calculate_shift_hours(start_time, end_time, break_mins)
-    note = data.get('note', '')
-    
-    raw_media = data.get('media', '')
-    if isinstance(raw_media, (list, dict)):
-        media = json.dumps(raw_media)
-    else:
-        media = str(raw_media or '')
+        data = request.json or {}
+        worker_id = data.get('worker_id') or data.get('workerId')
+        date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
+        start_time = data.get('start_time') or data.get('startTime')
+        end_time = data.get('end_time') or data.get('endTime')
+        break_mins = int(data.get('break_minutes', data.get('breakMinutes', 0)))
+        total_hours = float(data.get('total_hours', data.get('totalHours', 0.0))) or calculate_shift_hours(start_time, end_time, break_mins)
+        note = data.get('note', '')
+        
+        raw_media = data.get('media', '')
+        if isinstance(raw_media, (list, dict)):
+            media = json.dumps(raw_media)
+        else:
+            media = str(raw_media or '')
 
-    status = data.get('status', 'pending')
+        status = data.get('status', 'pending')
 
-    db = get_db()
-    db.execute("""
-        UPDATE shifts 
-        SET worker_id = ?, date = ?, start_time = ?, end_time = ?, break_minutes = ?, 
-            total_hours = ?, note = ?, media = ?, status = ?, updated_at = ?
-        WHERE id = ? AND crew_id = ?
-    """, (worker_id, date_str, start_time, end_time, break_mins, total_hours, note, media, status, int(time.time()), shift_id, g.user['crew_id']))
-    db.commit()
-    return jsonify({"success": True})
+        db = get_db()
+        crew_id = g.user.get('crew_id')
+        db.execute("""
+            UPDATE shifts 
+            SET worker_id = ?, date = ?, start_time = ?, end_time = ?, break_minutes = ?, 
+                total_hours = ?, note = ?, media = ?, status = ?, updated_at = ?
+            WHERE id = ? AND crew_id = ?
+        """, (worker_id, date_str, start_time, end_time, break_mins, total_hours, note, media, status, int(time.time()), shift_id, crew_id))
+        db.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        print("Error in edit_shift:", traceback.format_exc())
+        return jsonify({"error": f"Serverfehler beim Bearbeiten: {str(e)}"}), 500
 
 @app.route('/api/shifts/<shift_id>', methods=['DELETE'])
 @login_required
