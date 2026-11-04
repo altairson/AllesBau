@@ -628,12 +628,16 @@ def pause_timer():
 @app.route('/api/timers/stop', methods=['POST'])
 @login_required
 def stop_timer():
-    if g.user['role'] != 'leader':
-        return jsonify({"error": "Only leader can stop timers"}), 403
-
     data = request.json or {}
     worker_id = data.get('worker_id')
-    date_str = data.get('date')
+    if not worker_id:
+        return jsonify({"error": "Worker ID fehlt"}), 400
+
+    # Allow worker to stop their own timer, or leader/supervisor to stop any crew timer
+    if g.user['role'] not in ['leader', 'supervisor'] and g.user['id'] != worker_id:
+        return jsonify({"error": "Keine Berechtigung zum Stoppen dieses Timers"}), 403
+
+    date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
     round_time = data.get('round_time', True)
     if round_time:
         start_time_str = round_time_to_30_minutes(data.get('start_time'))
@@ -644,8 +648,14 @@ def stop_timer():
 
     break_mins = int(data.get('break_minutes', 0))
     total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time_str, end_time_str, break_mins)
-    note = data.get('note', 'Shift logged from live timer')
-    media = data.get('media', '')
+    note = data.get('note', 'Schicht über Live-Timer erfasst')
+    
+    # Properly serialize media array to JSON string for SQLite storage
+    raw_media = data.get('media', '')
+    if isinstance(raw_media, (list, dict)):
+        media = json.dumps(raw_media)
+    else:
+        media = str(raw_media or '')
 
     db = get_db()
     # Double entry prevention
@@ -671,7 +681,7 @@ def stop_timer():
 def add_manual_shift():
     data = request.json or {}
     worker_ids = data.get('worker_ids') or ([data.get('worker_id')] if data.get('worker_id') else [])
-    date_str = data.get('date')
+    date_str = data.get('date') or datetime.now().strftime('%Y-%m-%d')
     round_time = data.get('round_time', True)
     if round_time:
         start_time = round_time_to_30_minutes(data.get('start_time'))
@@ -683,7 +693,12 @@ def add_manual_shift():
     break_mins = int(data.get('break_minutes', 0))
     total_hours = float(data.get('total_hours', 0.0)) or calculate_shift_hours(start_time, end_time, break_mins)
     note = data.get('note', '')
-    media = data.get('media', '')
+
+    raw_media = data.get('media', '')
+    if isinstance(raw_media, (list, dict)):
+        media = json.dumps(raw_media)
+    else:
+        media = str(raw_media or '')
 
     db = get_db()
     shift_ids = []
@@ -722,7 +737,13 @@ def edit_shift(shift_id):
     break_mins = int(data.get('break_minutes', data.get('breakMinutes', 0)))
     total_hours = float(data.get('total_hours', data.get('totalHours', 0.0))) or calculate_shift_hours(start_time, end_time, break_mins)
     note = data.get('note', '')
-    media = data.get('media', '')
+    
+    raw_media = data.get('media', '')
+    if isinstance(raw_media, (list, dict)):
+        media = json.dumps(raw_media)
+    else:
+        media = str(raw_media or '')
+
     status = data.get('status', 'pending')
 
     db = get_db()

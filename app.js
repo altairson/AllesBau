@@ -629,7 +629,33 @@ const I18N = {
     mark_approved_directly: "Direkt als genehmigt buchen (vom Lohn abziehen)",
     all_workers_worked: "Arbeiter am Tag",
     details_expand: "Details anzeigen",
-    details_collapse: "Details schließen"
+    details_collapse: "Details schließen",
+    history_title: "Auszahlungsverlauf & Belege",
+    history_subtitle: "Chronologisches Zahlungsjournal & Quittungsarchiv",
+    receipt_no: "Beleg-Nr.",
+    recipient: "Empfänger",
+    logged_by: "Erfasst durch",
+    no_payments_yet: "Noch keine Auszahlungen erfasst.",
+    fold_all: "Alle zuklappen",
+    unfold_all: "Alle aufklappen",
+    add_worker: "+ Mitarbeiter anlegen",
+    manual_entry: "+ Schicht eintragen",
+    worker_portal: "Mitarbeiter-Portal",
+    logged_in_as: "Angemeldet als:",
+    today_shifts: "Heutige erfasste Schichten",
+    no_shifts_today: "Heute noch keine Schichten abgeschlossen.",
+    shift_clock: "Laufende Arbeitszeit",
+    today_status: "Heutiger Status",
+    on_break: "In Pause",
+    not_clocked_in: "Nicht eingestempelt",
+    crew_workers: "Mitarbeiter-Team",
+    active_workers_count: "aktiv",
+    supervisor_view: "Supervisor-Ansicht",
+    change_password: "Passwort ändern",
+    current_password: "Aktuelles Passwort",
+    new_password: "Neues Passwort",
+    update_password: "Passwort aktualisieren",
+    filter_worker_balance: "Mitarbeiter filtern:"
   },
   en: {
     nav_home: "Home",
@@ -701,7 +727,33 @@ const I18N = {
     mark_approved_directly: "Mark as approved immediately (deduct from wage)",
     all_workers_worked: "Workers on day",
     details_expand: "Show details",
-    details_collapse: "Hide details"
+    details_collapse: "Hide details",
+    history_title: "Payment History & Receipts",
+    history_subtitle: "Chronological transaction journal & receipt archive",
+    receipt_no: "Receipt #",
+    recipient: "Recipient",
+    logged_by: "Logged by",
+    no_payments_yet: "No payment history recorded yet.",
+    fold_all: "Collapse all",
+    unfold_all: "Expand all",
+    add_worker: "+ Add Worker",
+    manual_entry: "+ Manual Entry",
+    worker_portal: "Worker Portal",
+    logged_in_as: "Logged in as:",
+    today_shifts: "Today's Logged Shifts",
+    no_shifts_today: "No completed shifts logged for today yet.",
+    shift_clock: "Live Shift Clock",
+    today_status: "Today's Status",
+    on_break: "On Break",
+    not_clocked_in: "Not Clocked In",
+    crew_workers: "Crew Workers",
+    active_workers_count: "active",
+    supervisor_view: "Supervisor View",
+    change_password: "Change Password",
+    current_password: "Current Password",
+    new_password: "New Password",
+    update_password: "Update Password",
+    filter_worker_balance: "Filter Worker Balance:"
   }
 };
 
@@ -817,12 +869,27 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         body: body ? JSON.stringify(body) : null
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      let data = null;
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          data = { error: 'Ungültiges Datenformat vom Server' };
+        }
+      } else {
+        const text = await res.text();
+        if (!res.ok) {
+          throw new Error(res.status === 404 ? 'Endpunkt nicht gefunden (404)' : `Serverfehler (${res.status})`);
+        }
+        data = { message: text };
+      }
+
       if (!res.ok) {
         if (res.status === 401) {
           logout();
         }
-        throw new Error(data.error || 'Server error');
+        throw new Error(data?.error || data?.message || 'Serverfehler');
       }
       appState.isOnline = true;
       return data;
@@ -1180,7 +1247,7 @@ function updateEditCutPreview() {
 async function handleStartTimer(workerId) {
   try {
     await apiRequest('/api/timers/start', 'POST', { worker_id: workerId });
-    showToast('Timer started live!');
+    showToast('Timer live gestartet! ⏱️');
     syncDataWithServer();
   } catch (err) {
     showToast(err.message, 'error');
@@ -1226,7 +1293,7 @@ function handleStopTimerPrompt(workerId) {
     breakMinutes,
     calculatedHours,
     date: getTodayString(),
-    note: 'Live timer shift log',
+    note: 'Schicht über Live-Timer erfasst',
     media: []
   };
   appState.activeModal = 'stopTimerConfirm';
@@ -1602,7 +1669,16 @@ async function handleRejectPayment(paymentId) {
 }
 
 function toggleCalendarDay(dateStr) {
-  appState.expandedCalendarDays[dateStr] = !appState.expandedCalendarDays[dateStr];
+  const current = appState.expandedCalendarDays[dateStr] ?? false;
+  appState.expandedCalendarDays[dateStr] = !current;
+  renderApp();
+}
+
+function toggleAllCalendarDays(expand = true) {
+  const monthShifts = (appData.shifts || []).filter(s => s.date && s.date.startsWith(appState.selectedMonth));
+  monthShifts.forEach(s => {
+    appState.expandedCalendarDays[s.date] = expand;
+  });
   renderApp();
 }
 
@@ -2028,37 +2104,37 @@ function renderHome() {
         <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-5 shadow-lg">
           <div class="flex items-start justify-between">
             <div>
-              <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Worker Dashboard</span>
+              <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">${t('worker_portal', 'Mitarbeiter-Portal')}</span>
               <h2 class="text-2xl font-bold text-white mt-0.5">${user.name}</h2>
-              <p class="text-xs text-slate-400 mt-0.5">Logged in as: <span class="text-slate-200 font-semibold">${user.username}</span></p>
+              <p class="text-xs text-slate-400 mt-0.5">${t('logged_in_as', 'Angemeldet als:')} <span class="text-slate-200 font-semibold">${user.username}</span></p>
             </div>
             <div class="text-right">
-              <span class="text-xs text-slate-400">To Be Paid</span>
+              <span class="text-xs text-slate-400">${t('balance_remaining', 'Offener Lohnanspruch')}</span>
               <div class="text-xl font-bold text-emerald-400 mt-0.5">${formatCurrency(fin.balance)}</div>
             </div>
           </div>
 
           <div class="mt-4 pt-4 border-t border-slate-700/60 flex items-center justify-between">
             <div>
-              <span class="text-xs text-slate-400 block">Today's Shift Status</span>
+              <span class="text-xs text-slate-400 block">${t('today_status', 'Heutiger Status')}</span>
               ${isRunning ? `
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 mt-1">
-                  <span class="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span> Clocked In
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span> ${t('active_now', 'Aktiv (Eingestempelt)')}
                 </span>
               ` : isPaused ? `
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50 mt-1">
-                  ⏸️ On Break
+                  ⏸️ ${t('on_break', 'In Pause')}
                 </span>
               ` : `
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-700/60 text-slate-300 mt-1">
-                  ⚪ Not Clocked In
+                  ⚪ ${t('not_clocked_in', 'Nicht eingestempelt')}
                 </span>
               `}
             </div>
 
             ${(isRunning || isPaused) ? `
               <div class="text-right">
-                <span class="text-xs text-slate-400 block">Live Shift Clock</span>
+                <span class="text-xs text-slate-400 block">${t('shift_clock', 'Laufende Arbeitszeit')}</span>
                 <span class="text-2xl font-mono font-bold text-emerald-400" data-live-timer="${user.id}">
                   ${formatElapsedSeconds(getWorkerElapsedSeconds(user.id))}
                 </span>
@@ -2068,21 +2144,21 @@ function renderHome() {
         </div>
 
         <div class="space-y-2">
-          <h3 class="text-sm font-semibold text-slate-300 px-1">Today's Logged Shifts</h3>
+          <h3 class="text-sm font-semibold text-slate-300 px-1">${t('today_shifts', 'Heutige erfasste Schichten')}</h3>
           ${todayShifts.length === 0 ? `
             <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-6 text-center text-slate-400 text-sm">
-              No completed shifts logged for today yet.
+              ${t('no_shifts_today', 'Heute noch keine Schichten abgeschlossen.')}
             </div>
           ` : todayShifts.map(s => `
             <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 flex items-center justify-between">
               <div>
-                <div class="text-sm font-semibold text-white">${s.startTime} - ${s.endTime} (${s.totalHours} hrs)</div>
-                <div class="text-xs text-slate-400 mt-0.5">${s.note || 'Regular Shift'}</div>
+                <div class="text-sm font-semibold text-white">${s.startTime} - ${s.endTime} (${s.totalHours} Std.)</div>
+                <div class="text-xs text-slate-400 mt-0.5">${s.note || 'Reguläre Schicht'}</div>
               </div>
               <div>
-                ${s.status === 'approved' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">🟢 Approved</span>`
-                : s.status === 'rejected' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50">🔴 Rejected</span>`
-                : `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50">🟡 Pending</span>`}
+                ${s.status === 'approved' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">🟢 ${t('status_approved', 'Genehmigt')}</span>`
+                : s.status === 'rejected' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50">🔴 ${t('status_rejected', 'Abgelehnt')}</span>`
+                : `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50">🟡 ${t('status_pending', 'Ausstehend')}</span>`}
               </div>
             </div>
           `).join('')}
@@ -2098,24 +2174,24 @@ function renderHome() {
     <div class="space-y-3">
       <div class="flex items-center justify-between px-1">
         <div class="flex items-center gap-2">
-          <h2 class="text-xs font-bold tracking-wider uppercase text-slate-400">Crew Workers (${activeWorkers.length})</h2>
+          <h2 class="text-xs font-bold tracking-wider uppercase text-slate-400">${t('crew_workers', 'Mitarbeiter-Team')} (${activeWorkers.length})</h2>
           ${activeRunningCount > 0 ? `
             <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse"></span>
-              ${activeRunningCount} active
+              ${activeRunningCount} ${t('active_workers_count', 'aktiv')}
             </span>
           ` : ''}
         </div>
         ${isSupervisor ? `
-          <span class="text-xs text-purple-400 font-semibold bg-purple-900/30 px-2.5 py-0.5 rounded-full border border-purple-800/50">Supervisor View</span>
+          <span class="text-xs text-purple-400 font-semibold bg-purple-900/30 px-2.5 py-0.5 rounded-full border border-purple-800/50">${t('supervisor_view', 'Supervisor-Ansicht')}</span>
         ` : ''}
       </div>
 
       <div class="space-y-2">
         ${activeWorkers.length === 0 ? `
           <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
-            <p>No workers registered in crew roster yet.</p>
-            ${isLeader ? `<button onclick="openModal('addUser')" class="mt-3 text-xs bg-blue-600 text-white px-4 py-2 rounded-xl font-semibold">Register First Worker</button>` : ''}
+            <p>Noch keine Mitarbeiter im Team angelegt.</p>
+            ${isLeader ? `<button onclick="openModal('addUser')" class="mt-3 text-xs bg-[#F5C000] text-black px-4 py-2 rounded-xl font-bold shadow-md">+ Ersten Mitarbeiter anlegen</button>` : ''}
           </div>
         ` : activeWorkers.map(w => {
           const timer = appData.timers[w.id];
@@ -2140,7 +2216,7 @@ function renderHome() {
                   </div>
                   <div class="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
                     <span class="font-mono text-slate-300">@${w.username}</span>
-                    ${isRunning ? '<span class="text-emerald-400 font-semibold">• Running</span>' : isPaused ? '<span class="text-amber-400 font-semibold">• Pause</span>' : '<span class="text-slate-500">• Inaktiv</span>'}
+                    ${isRunning ? `<span class="text-emerald-400 font-semibold">• ${t('running', 'Läuft')}</span>` : isPaused ? `<span class="text-amber-400 font-semibold">• ${t('pause', 'Pause')}</span>` : '<span class="text-slate-500">• Inaktiv</span>'}
                   </div>
                 </div>
               </div>
@@ -2188,12 +2264,12 @@ function renderHome() {
           <button onclick="openModal('addUser')" 
             class="flex-1 flex items-center justify-center gap-2 bg-[#1c1c1c] hover:bg-[#262626] border border-[#333] hover:border-[#F5C000]/60 active-press text-white py-3 px-3 rounded-2xl text-xs font-bold shadow-md transition">
             <span class="text-[#F5C000] text-sm">👤+</span>
-            <span>+ Add User</span>
+            <span>${t('add_worker', '+ Mitarbeiter anlegen')}</span>
           </button>
           <button onclick="openModal('manualShift')" 
             class="flex-1 flex items-center justify-center gap-2 bg-[#1c1c1c] hover:bg-[#262626] border border-[#333] hover:border-[#F5C000]/60 active-press text-white py-3 px-3 rounded-2xl text-xs font-bold shadow-md transition">
             <span class="text-[#F5C000] text-sm">⏱️</span>
-            <span>Manual Entry</span>
+            <span>${t('manual_entry', '+ Schicht eintragen')}</span>
           </button>
         </div>
       ` : ''}
@@ -2892,6 +2968,22 @@ function renderCalendar() {
             let currentKw = null;
 
             return `
+              <!-- Quick Collapse / Expand All Toolbar (Requirement 3: Folded by default) -->
+              <div class="bg-[#171717] px-3.5 py-2 border-b border-[#262626] flex items-center justify-between text-xs">
+                <span class="text-slate-400 font-semibold text-[11px]">${sortedDates.length} Arbeitstage im Monat</span>
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="toggleAllCalendarDays(true)" 
+                    class="text-[#F5C000] hover:underline font-bold text-[11px] flex items-center gap-1 active-press">
+                    <span>🔽</span> <span>${t('unfold_all', 'Alle aufklappen')}</span>
+                  </button>
+                  <span class="text-slate-600">|</span>
+                  <button type="button" onclick="toggleAllCalendarDays(false)" 
+                    class="text-slate-400 hover:text-white text-[11px] flex items-center gap-1 active-press">
+                    <span>🔼</span> <span>${t('fold_all', 'Alle zuklappen')}</span>
+                  </button>
+                </div>
+              </div>
+
               <div class="divide-y divide-[#202020]">
                 ${sortedDates.map(dateStr => {
                   const dayShifts = groupedByDate[dateStr];
@@ -2932,8 +3024,8 @@ function renderCalendar() {
                   const hasPending = dayShifts.some(s => s.status === 'pending');
                   const hasRejected = dayShifts.some(s => s.status === 'rejected');
 
-                  // Expansion state: default open (or user toggle)
-                  const isExpanded = appState.expandedCalendarDays[dateStr] ?? true;
+                  // Expansion state: FOLDED UP BY DEFAULT (Requirement 3)
+                  const isExpanded = appState.expandedCalendarDays[dateStr] ?? false;
 
                   let weekHeader = '';
                   if (kw !== currentKw) {
@@ -3104,8 +3196,8 @@ function renderPayments() {
     <div class="space-y-4">
       ${!isWorker ? `
         <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 flex items-center justify-between">
-          <label class="text-xs font-semibold text-slate-300">Filter Worker Balance:</label>
-          <select onchange="appState.paymentWorkerFilter=this.value; renderApp();" class="bg-slate-900 text-white text-xs border border-slate-700 rounded-xl px-3 py-1.5 focus:outline-none">
+          <label class="text-xs font-semibold text-slate-300">${t('filter_worker_balance', 'Mitarbeiter filtern:')}</label>
+          <select onchange="appState.paymentWorkerFilter=this.value; renderApp();" class="bg-slate-900 text-white text-xs border border-slate-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#F5C000]">
             <option value="all" ${appState.paymentWorkerFilter === 'all' ? 'selected' : ''}>${t('all_workers', 'Alle Mitarbeiter')}</option>
             ${appData.workers.filter(w => w.role === 'worker').map(w => `<option value="${w.id}" ${appState.paymentWorkerFilter === w.id ? 'selected' : ''}>${w.name}</option>`).join('')}
           </select>
@@ -3115,7 +3207,7 @@ function renderPayments() {
       <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/70 rounded-3xl p-5 shadow-xl space-y-4">
         <div class="flex items-center justify-between">
           <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
-            ${isLeader ? 'Leader Payroll & Gewinn Übersicht' : isSupervisor ? 'Abrechnung & Ausgaben' : 'Lohn & Auszahlungsübersicht'}
+            ${isLeader ? 'Leader Lohnabrechnung & Gewinnübersicht' : isSupervisor ? 'Abrechnung & Ausgaben' : 'Lohn- & Auszahlungsübersicht'}
           </span>
           ${isLeader ? `
             <button onclick="openModal('logPayment')" 
@@ -3263,42 +3355,79 @@ function renderPayments() {
         </div>
       ` : ''}
 
-      <div class="space-y-3">
-        <h3 class="text-sm font-bold text-slate-300 px-1">Payment & Payout History</h3>
+      <!-- Distinct Payment & Payout History Section (Requirement 4: Distinct Receipt/Ledger Styling) -->
+      <div class="space-y-3 pt-2">
+        <div class="flex items-center justify-between px-1">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📜</span>
+            <div>
+              <h3 class="text-sm font-black text-white uppercase tracking-wider">${t('history_title', 'Auszahlungsverlauf & Belege')}</h3>
+              <p class="text-[11px] text-slate-400">${t('history_subtitle', 'Chronologisches Zahlungsjournal & Quittungsarchiv')}</p>
+            </div>
+          </div>
+          <span class="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-blue-950/70 border border-blue-800/50 text-blue-300 font-bold">
+            ${filteredPayments.length} Belege
+          </span>
+        </div>
+
         ${filteredPayments.length === 0 ? `
-          <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-8 text-center text-slate-400 text-sm">
-            No payment history recorded yet.
+          <div class="bg-gradient-to-br from-[#0c131d] to-[#121c2b] border border-blue-900/40 rounded-2xl p-8 text-center text-slate-400 text-sm">
+            ${t('no_payments_yet', 'Noch keine Auszahlungen erfasst.')}
           </div>
         ` : filteredPayments.map(p => {
           const wid = p.workerId || p.worker_id;
           const worker = getWorker(wid);
-          return `
-            <div class="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-4 shadow-sm space-y-3">
-              <div class="flex items-start justify-between">
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-base font-bold text-white">${formatCurrency(p.amount)}</span>
-                    <span class="text-xs text-slate-400">• ${formatDate(p.date)}</span>
-                  </div>
-                  <div class="text-xs font-semibold text-slate-300 mt-1">
-                    Empfänger: <span class="text-emerald-300">${p.receivedBy || worker?.name}</span>
-                  </div>
-                  <div class="text-[11px] text-slate-400 mt-0.5">
-                    Erfasst von: ${p.loggedBy || 'Leader'} ${p.comment ? `— "${p.comment}"` : ''}
-                  </div>
-                </div>
+          const isApproved = p.status === 'approved';
+          const isRejected = p.status === 'rejected';
 
-                <div class="text-right">
-                  ${p.status === 'approved' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">🟢 Genehmigt</span>`
-                  : p.status === 'rejected' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50">🔴 Abgelehnt</span>`
-                  : `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50">🟡 Ausstehend</span>`}
+          return `
+            <div class="bg-gradient-to-br from-[#0c131d] via-[#101926] to-[#141f30] border-2 border-slate-700/70 ${isApproved ? 'border-l-4 border-l-emerald-500' : isRejected ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-[#F5C000]'} rounded-2xl p-4 shadow-xl space-y-2.5 relative overflow-hidden transition hover:border-slate-600">
+              <!-- Top Row: Receipt Code + Date + Status -->
+              <div class="flex items-center justify-between pb-2 border-b border-slate-700/60 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700 text-[#F5C000] font-mono text-[11px] font-bold">
+                    🧾 AB-PAY-${(p.id || '').replace('p_', '').toUpperCase().slice(0, 8)}
+                  </span>
+                  <span class="text-slate-400 font-medium">📅 ${formatDate(p.date)}</span>
+                </div>
+                <div>
+                  ${isApproved ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">🟢 Genehmigt</span>`
+                  : isRejected ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800/60">🔴 Abgelehnt</span>`
+                  : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/60">🟡 Ausstehend</span>`}
                 </div>
               </div>
 
-              <!-- Action Buttons: Details/Invoice, plus Approve/Reject if pending -->
-              <div class="pt-2 border-t border-slate-700/50 flex flex-wrap items-center justify-between gap-2">
+              <!-- Main Amount & Recipient Box -->
+              <div class="flex items-center justify-between py-1">
+                <div>
+                  <span class="text-[10px] text-slate-400 uppercase font-semibold block">Auszahlungsbetrag</span>
+                  <span class="text-xl font-black text-[#F5C000] font-mono tracking-tight block">${formatCurrency(p.amount)}</span>
+                </div>
+                <div class="text-right">
+                  <span class="text-[10px] text-slate-400 uppercase font-semibold block">Empfänger</span>
+                  <span class="text-xs font-bold text-white block">${p.receivedBy || worker?.name || 'Mitarbeiter'}</span>
+                  <span class="text-[10px] text-slate-500 font-mono block">@${worker?.username || '-'}</span>
+                </div>
+              </div>
+
+              <!-- Transaction Metadata Details Box -->
+              <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800/80 text-[11px] space-y-1 text-slate-300">
+                <div class="flex items-center justify-between text-slate-400">
+                  <span>✍️ ${t('logged_by', 'Erfasst durch')}:</span>
+                  <span class="text-slate-200 font-semibold">${p.loggedBy || 'LEADER'}</span>
+                </div>
+                ${p.comment ? `
+                  <div class="flex items-center justify-between text-slate-400">
+                    <span>💬 Notiz / Zweck:</span>
+                    <span class="text-slate-200 italic font-medium truncate max-w-[200px]" title="${p.comment}">"${p.comment}"</span>
+                  </div>
+                ` : ''}
+              </div>
+
+              <!-- Perforated / Dashed Receipt Divider -->
+              <div class="border-t border-dashed border-slate-700/80 pt-2 flex flex-wrap items-center justify-between gap-2">
                 <button onclick="openModal('paymentInvoice', '${p.id}')" 
-                  class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[#F5C000] px-3 py-1.5 rounded-xl text-xs font-bold active-press transition flex items-center gap-1.5 shadow-sm">
+                  class="bg-slate-900 hover:bg-slate-850 border border-slate-700 text-[#F5C000] px-3 py-1.5 rounded-xl text-xs font-bold active-press transition flex items-center gap-1.5 shadow-sm">
                   <span>📄</span> <span>${t('payment_details_invoice', 'Beleg / Quittung')}</span>
                 </button>
 
@@ -3462,28 +3591,28 @@ function renderModals() {
   // 2. Change Password Modal
   else if (modal === 'changePassword') {
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">Change Password</h3>
+          <h3 class="text-base font-bold text-white">${t('change_password', 'Passwort ändern')}</h3>
           <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
         </div>
 
         <form onsubmit="handleChangePassword(event)" class="space-y-3">
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Current Password</label>
-            <input type="password" name="current_password" required placeholder="Enter current password"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+            <label class="text-xs font-semibold text-slate-300 block mb-1">${t('current_password', 'Aktuelles Passwort')}</label>
+            <input type="password" name="current_password" required placeholder="Aktuelles Passwort eingeben"
+              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">New Password</label>
-            <input type="password" name="new_password" required placeholder="Enter new password"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+            <label class="text-xs font-semibold text-slate-300 block mb-1">${t('new_password', 'Neues Passwort')}</label>
+            <input type="password" name="new_password" required placeholder="Neues Passwort eingeben"
+              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
           </div>
 
           <div class="pt-3 flex justify-end gap-2">
-            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
-            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Update Password</button>
+            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
+            <button type="submit" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2 rounded-xl text-xs font-bold active-press shadow-md">${t('update_password', 'Passwort aktualisieren')}</button>
           </div>
         </form>
       </div>
@@ -3493,7 +3622,7 @@ function renderModals() {
   // 3. Add Supervisor or Worker (Leader action)
   else if (modal === 'addUser') {
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
           <h3 class="text-base font-bold text-white">Mitarbeiter registrieren</h3>
           <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
@@ -3574,7 +3703,7 @@ function renderModals() {
     const currentCut = currentBillingRate - currentWorkerRate;
 
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <h3 class="text-base font-bold text-white">Raten & Lohn anpassen</h3>
@@ -3647,7 +3776,7 @@ function renderModals() {
       `;
     } else {
       modalContent = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
           <div class="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h3 class="text-base font-bold text-white">Manuelle Schichterfassung</h3>
@@ -3794,7 +3923,7 @@ function renderModals() {
       const initialRemaining = Math.max(0, initialFin.workerBalance);
 
       modalContent = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
           <div class="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h3 class="text-base font-bold text-white">Auszahlung erfassen</h3>
@@ -3880,20 +4009,20 @@ function renderModals() {
   else if (modal === 'stopTimerConfirm' && appState.modalPayload) {
     const p = appState.modalPayload;
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">Schicht beenden (Clock Out)</h3>
+          <h3 class="text-base font-bold text-white">Schicht beenden</h3>
           <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
         </div>
 
         <div class="space-y-3">
           <div class="bg-slate-800/60 p-3 rounded-2xl border border-slate-700 space-y-1.5">
             <div class="flex items-center justify-between">
-              <span class="text-xs text-slate-400">Worker:</span>
+              <span class="text-xs text-slate-400">Mitarbeiter:</span>
               <span class="text-white font-bold text-sm">${p.workerName}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-xs text-slate-400">Live Elapsed:</span>
+              <span class="text-xs text-slate-400">Verstrichene Zeit:</span>
               <span class="text-emerald-400 font-mono font-bold">${formatElapsedSeconds(p.elapsedSeconds)}</span>
             </div>
             <div class="pt-1 border-t border-slate-700/60 flex items-center justify-between text-[11px]">
@@ -4286,7 +4415,7 @@ function renderModals() {
   }
 
   return `
-    <div class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       ${modalContent}
     </div>
   `;
