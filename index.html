@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>AllesBau — Arbeitsstunden & Lohnverwaltung</title>
+
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#111111">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AllesBau">
+  <meta name="application-name" content="AllesBau">
+  <meta name="description" content="Mobile-first Arbeitszeiterfassung, Live-Schichterfassung und Lohnverwaltung für AllesBau Bauunternehmen.">
+
+  <!-- Favicon / Touch Icon — AllesBau Logo -->
+  <link rel="icon" type="image/png" href="./icon.png">
+  <link rel="apple-touch-icon" href="./icon.png">
+
+  <!-- jsPDF & AutoTable for 1-Page Monthly PDF Report Generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              400: '#fbbf24',
+              500: '#F5C000',
+              600: '#d4a000',
+              700: '#a37800',
+              900: '#1a1100',
+            },
+            dark: {
+              950: '#0d0d0d',
+              900: '#111111',
+              800: '#1a1a1a',
+              700: '#242424',
+              600: '#2e2e2e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="bg-[#0d0d0d] text-slate-100 antialiased selection:bg-brand-500 selection:text-black min-h-screen">
+  
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-3 left-1/2 -translate-x-1/2 w-full max-w-[460px] px-4 z-50 pointer-events-none flex flex-col gap-2"></div>
+
+  <!-- App Mount Root -->
+  <div id="app-root"></div>
+
+  <!-- App Logic -->
+  <script src="./app.js"></script>
+</body>
+</html>
