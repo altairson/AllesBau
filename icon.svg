@@ -1,18 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- Background -->
-  <rect width="512" height="512" rx="100" fill="#111111"/>
-  <!-- House roof (gold) -->
-  <polygon points="256,80 440,230 72,230" fill="#F5C000" stroke="#F5C000" stroke-linejoin="round"/>
-  <!-- House body (dark) -->
-  <rect x="130" y="225" width="252" height="185" rx="6" fill="#1a1a1a"/>
-  <!-- House door -->
-  <rect x="220" y="300" width="72" height="110" rx="8" fill="#F5C000"/>
-  <!-- Window -->
-  <rect x="306" y="270" width="52" height="48" rx="6" fill="#F5C000" opacity="0.9"/>
-  <line x1="332" y1="270" x2="332" y2="318" stroke="#111" stroke-width="4"/>
-  <line x1="306" y1="294" x2="358" y2="294" stroke="#111" stroke-width="4"/>
-  <!-- Hammer handle -->
-  <rect x="290" y="100" width="20" height="80" rx="8" transform="rotate(40,290,100)" fill="#aaaaaa"/>
-  <!-- Hammer head -->
-  <rect x="330" y="60" width="65" height="36" rx="10" transform="rotate(40,330,60)" fill="#cccccc"/>
+  <defs>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F9B33B" />
+      <stop offset="100%" stop-color="#E89B16" />
+    </linearGradient>
+    <linearGradient id="slateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#55697A" />
+      <stop offset="100%" stop-color="#3D4E5B" />
+    </linearGradient>
+  </defs>
+  <!-- Outer Amber Gable / Roof -->
+  <polygon points="86,256 126,256 256,126 386,256 426,256 256,86" fill="url(#amberGrad)"/>
+  <!-- Chimney / Wall block on left -->
+  <polygon points="132,150 172,150 172,170 132,210" fill="url(#amberGrad)"/>
+  <!-- Inner Slate Gable / Roof -->
+  <polygon points="142,256 178,256 256,178 334,256 370,256 256,142" fill="url(#slateGrad)"/>
+  <!-- Hammer Handle (Amber) -->
+  <polygon points="320,186 350,156 414,220 384,250" fill="url(#amberGrad)"/>
+  <!-- Hammer Head (Slate) -->
+  <path d="M 334,142 C 342,126 364,116 386,118 C 392,122 388,134 380,140 L 404,164 C 410,158 420,158 426,164 L 414,176 L 392,154 L 372,174 C 364,180 354,178 348,172 Z" fill="url(#slateGrad)"/>
+  <!-- Brand textallesBau -->
+  <text x="50" y="360" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="76" font-weight="800" fill="#455A64" letter-spacing="-1">alles<tspan fill="#F5A623">Bau</tspan></text>
+  <!-- Subtitle BAUUNTERNEHMEN -->
+  <text x="54" y="415" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="28" font-weight="700" fill="#5F7384" letter-spacing="8">BAUUNTERNEHMEN</text>
 </svg>

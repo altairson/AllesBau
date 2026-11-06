@@ -558,8 +558,47 @@ function toggleLanguage() {
   renderApp();
 }
 
+let currentTheme = localStorage.getItem('allesbau_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+function getTheme() {
+  return currentTheme;
+}
+
+function setTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('allesbau_theme', theme);
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.setAttribute('content', theme === 'dark' ? '#0c1015' : '#ffffff');
+  renderApp();
+}
+
+function toggleTheme() {
+  setTheme(currentTheme === 'dark' ? 'light' : 'dark');
+}
+
+// Initial theme setup on script execution
+if (currentTheme === 'dark') {
+  document.documentElement.classList.add('dark');
+} else {
+  document.documentElement.classList.remove('dark');
+}
+
 const I18N = {
   de: {
+    settings_title: "Einstellungen",
+    theme_label: "Erscheinungsbild / Modus",
+    theme_light: "Hell",
+    theme_dark: "Dunkel",
+    language_label: "Sprache / Language",
+    account_label: "Benutzerkonto",
+    system_label: "System & Cloud",
+    close: "Schließen",
+    done: "Fertig",
     nav_home: "Übersicht",
     nav_calendar: "Kalender",
     nav_payments: "Auszahlungen",
@@ -658,6 +697,15 @@ const I18N = {
     filter_worker_balance: "Mitarbeiter filtern:"
   },
   en: {
+    settings_title: "Settings",
+    theme_label: "Appearance / Theme",
+    theme_light: "Light",
+    theme_dark: "Dark",
+    language_label: "Language / Sprache",
+    account_label: "Account Profile",
+    system_label: "System & Cloud Sync",
+    close: "Close",
+    done: "Done",
     nav_home: "Home",
     nav_calendar: "Calendar",
     nav_payments: "Payments",
@@ -1221,8 +1269,8 @@ function updateAddUserCutPreview() {
   const cut = b - h;
 
   preview.innerHTML = `
-    <span class="text-slate-300 font-semibold">💰 Dein Leader-Anteil (Cut):</span>
-    <span class="font-extrabold ${cut >= 0 ? 'text-[#F5C000]' : 'text-red-400'} text-sm">${cut >= 0 ? '+' : ''}${formatCurrency(cut)} / Std.</span>
+    <span class="text-slate-600 dark:text-slate-300 font-semibold">💰 Dein Leader-Anteil (Cut):</span>
+    <span class="font-extrabold ${cut >= 0 ? 'text-[#F5A623]' : 'text-red-500'} text-sm">${cut >= 0 ? '+' : ''}${formatCurrency(cut)} / Std.</span>
   `;
 }
 
@@ -1236,7 +1284,7 @@ function updateEditCutPreview() {
   const h = parseFloat(hInput.value) || 0;
   const cut = b - h;
 
-  val.className = `font-black text-sm ${cut >= 0 ? 'text-[#F5C000]' : 'text-red-400'}`;
+  val.className = `font-black text-sm ${cut >= 0 ? 'text-[#F5A623]' : 'text-red-500'}`;
   val.textContent = `${cut >= 0 ? '+' : ''}${formatCurrency(cut)}/h`;
 }
 
@@ -1935,98 +1983,114 @@ function switchTab(tabName) {
 
 function renderAuthScreen() {
   const isLogin = appState.authTab === 'login';
-  const customUrl = localStorage.getItem('allesbau_backend_url') || '';
+  const isDark = currentTheme === 'dark';
 
   return `
-    <div class="min-h-screen bg-[#0d0d0d] flex items-center justify-center p-4">
-      <div class="w-full max-w-md bg-[#111111] border border-[#2a2a2a] rounded-3xl p-6 shadow-2xl space-y-5">
+    <div class="min-h-screen bg-slate-50 dark:bg-[#0c1015] text-slate-800 dark:text-slate-100 flex items-center justify-center p-4 transition-colors">
+      <div class="w-full max-w-sm bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-3xl p-6 shadow-xl space-y-4">
         
-        <!-- App Title & Real AllesBau Logo -->
-        <div class="text-center space-y-2">
-          <div class="w-28 h-28 mx-auto rounded-3xl overflow-hidden bg-black border border-[#F5C000]/40 flex items-center justify-center shadow-xl shadow-[#F5C000]/15 p-1.5">
-            <img src="./logo.png" alt="AllesBau Logo" class="w-full h-full object-contain">
+        <!-- Top Toolbar: Theme & Language Quick Toggle -->
+        <div class="flex items-center justify-between pb-1">
+          <button onclick="toggleTheme()" 
+            class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-[#1c2430] border border-slate-200 dark:border-[#283544] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition active-press flex items-center gap-1.5 shadow-sm">
+            <span>${isDark ? '🌙' : '☀️'}</span>
+            <span>${isDark ? 'Dunkel' : 'Hell'}</span>
+          </button>
+          
+          <button onclick="toggleLanguage()" 
+            class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-[#1c2430] border border-slate-200 dark:border-[#283544] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition active-press flex items-center gap-1 shadow-sm">
+            <span>${currentLang === 'de' ? '🇩🇪 DE' : '🇬🇧 EN'}</span>
+          </button>
+        </div>
+
+        <!-- App Title & New AllesBau Logo -->
+        <div class="text-center space-y-2 pt-1">
+          <div class="w-20 h-20 mx-auto rounded-2xl overflow-hidden bg-white dark:bg-[#11161d] border border-slate-200/80 dark:border-[#253240] flex items-center justify-center shadow-md p-1">
+            <img src="./logo.jpg" alt="AllesBau Logo" class="w-full h-full object-contain">
           </div>
           <div>
-            <h1 class="text-2xl font-black tracking-tight text-white">alles<span class="text-[#F5C000]">Bau</span></h1>
-            <p class="text-[11px] text-[#aaa] font-bold tracking-widest uppercase">Bauunternehmen • Alles aus einer Hand!</p>
+            <h1 class="text-xl font-extrabold tracking-tight text-[#455A64] dark:text-slate-100 leading-none">
+              alles<span class="text-[#F5A623]">Bau</span>
+            </h1>
+            <p class="text-[9px] text-[#455A64] dark:text-slate-400 font-bold tracking-widest uppercase mt-1">BAUUNTERNEHMEN</p>
           </div>
           
           <!-- Mode Indicator -->
-          <div class="pt-1">
-            <span class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-semibold ${getApiBaseUrl() ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/50' : 'bg-[#1a1a1a] text-[#888] border border-[#2a2a2a]'}">
-              <span class="w-1.5 h-1.5 rounded-full ${getApiBaseUrl() ? 'bg-emerald-400' : 'bg-[#F5C000]'}"></span>
+          <div class="pt-0.5">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold ${getApiBaseUrl() ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-slate-100 dark:bg-[#1c2430] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-[#263442]'}">
+              <span class="w-1.5 h-1.5 rounded-full ${getApiBaseUrl() ? 'bg-emerald-500' : 'bg-[#F5A623]'}"></span>
               ${getApiBaseUrl() ? 'Cloud verbunden' : 'Lokale Datenbank'}
             </span>
           </div>
         </div>
 
         <!-- Auth Tabs Switcher -->
-        <div class="grid grid-cols-2 p-1 bg-[#1a1a1a] rounded-2xl border border-[#2a2a2a]">
+        <div class="grid grid-cols-2 p-1 bg-slate-100 dark:bg-[#0e1318] rounded-2xl border border-slate-200/80 dark:border-[#212a35]">
           <button onclick="appState.authTab='login'; renderApp();" 
-            class="py-2 text-xs font-bold rounded-xl transition ${isLogin ? 'bg-[#F5C000] text-black shadow-md' : 'text-[#666] hover:text-white'}">
+            class="py-1.5 text-xs font-bold rounded-xl transition ${isLogin ? 'bg-[#F5A623] text-black shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}">
             Login
           </button>
           <button onclick="appState.authTab='register'; renderApp();" 
-            class="py-2 text-xs font-bold rounded-xl transition ${!isLogin ? 'bg-[#F5C000] text-black shadow-md' : 'text-[#666] hover:text-white'}">
+            class="py-1.5 text-xs font-bold rounded-xl transition ${!isLogin ? 'bg-[#F5A623] text-black shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}">
             Registrieren
           </button>
         </div>
 
         <!-- Sign In Form -->
         ${isLogin ? `
-          <form onsubmit="handleLogin(event)" class="space-y-3.5">
+          <form onsubmit="handleLogin(event)" class="space-y-3">
             <div>
-              <label class="text-xs font-semibold text-[#999] block mb-1">Benutzername</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Benutzername</label>
               <input type="text" name="username" required placeholder="Benutzername eingeben"
-                class="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#F5C000]/60 transition">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-[#F5A623] transition">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-[#999] block mb-1">Passwort</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Passwort</label>
               <input type="password" name="password" required placeholder="Passwort eingeben"
-                class="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#F5C000]/60 transition">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:border-[#F5A623] transition">
             </div>
 
-            <button type="submit" class="w-full bg-[#F5C000] hover:bg-[#ffd333] text-black py-3 rounded-xl font-bold text-sm shadow-lg active-press transition">
+            <button type="submit" class="w-full bg-[#F5A623] hover:bg-[#E09618] text-black py-2.5 rounded-xl font-bold text-xs shadow-md active-press transition mt-1">
               Login
             </button>
           </form>
         ` : `
           <!-- Register Crew Leader Form -->
-          <form onsubmit="handleRegisterLeader(event)" class="space-y-3">
+          <form onsubmit="handleRegisterLeader(event)" class="space-y-2.5">
             <div>
-              <label class="text-xs font-semibold text-[#999] block mb-1">Firma / Team-Name</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Firma / Team-Name</label>
               <input type="text" name="company_name" required placeholder="z.B. AllesBau GmbH"
-                class="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-[#F5C000]/60 transition">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623] transition">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-[#999] block mb-1">Vorname & Nachname (Leiter)</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Vorname & Nachname (Leiter)</label>
               <input type="text" name="leader_name" required placeholder="z.B. Max Mustermann"
-                class="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-[#F5C000]/60 transition">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623] transition">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-[#999] block mb-1">Benutzername (Leiter)</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Benutzername (Leiter)</label>
               <input type="text" name="username" required placeholder="z.B. max_leiter"
-                class="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-[#F5C000]/60 transition">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623] transition">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-[#999] block mb-1">Passwort</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Passwort</label>
               <input type="password" name="password" required placeholder="Passwort wählen"
-                class="w-full bg-[#1a1a1a] border border-[#2a2a2a] text-white rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-[#F5C000]/60 transition">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623] transition">
             </div>
 
-            <button type="submit" class="w-full bg-[#F5C000] hover:bg-[#ffd333] text-black py-3 rounded-xl font-bold text-sm shadow-lg active-press transition mt-2">
+            <button type="submit" class="w-full bg-[#F5A623] hover:bg-[#E09618] text-black py-2.5 rounded-xl font-bold text-xs shadow-md active-press transition mt-2">
               Team-Account erstellen
             </button>
           </form>
         `}
 
         <!-- Server Config Link -->
-        <div class="pt-2 border-t border-[#1e1e1e] text-center">
-          <button onclick="openModal('serverConfig')" class="text-xs text-[#555] hover:text-[#F5C000] transition inline-flex items-center gap-1.5 font-medium">
+        <div class="pt-2 border-t border-slate-100 dark:border-[#1e2733] text-center">
+          <button onclick="openModal('serverConfig')" class="text-[11px] text-slate-500 dark:text-slate-400 hover:text-[#F5A623] transition inline-flex items-center gap-1.5 font-medium">
             <span>⚙️</span>
             <span>Cloud-Server / Backend URL konfigurieren</span>
           </button>
@@ -2035,7 +2099,6 @@ function renderAuthScreen() {
     </div>
   `;
 }
-
 
 // -------------------------------------------------------------
 // APP HEADER & VIEWS
@@ -2047,50 +2110,43 @@ function renderHeader() {
   const isSupervisor = user?.role === 'supervisor';
   const activeCount = Object.values(appData.timers).filter(t => t.status === 'running').length;
 
-  let roleIcon = '🛠️';
-  if (isSupervisor) roleIcon = '🛡️';
-  else if (user?.role === 'worker') roleIcon = '👷';
-
   return `
-    <header class="bg-[#111111]/95 backdrop-blur-md border-b border-[#222] sticky top-0 z-30 shadow-md safe-top">
+    <header class="glass-header border-b border-slate-200/80 dark:border-[#1e2733] sticky top-0 z-30 shadow-sm safe-top transition-colors">
       <div class="flex items-center justify-between px-4 py-2.5 max-w-[480px] mx-auto">
         
-        <!-- Left: Logo + App Name -->
+        <!-- Left: Logo + App Name (Minimalist, Crisp) -->
         <div class="flex items-center gap-2.5 min-w-0">
-          <div class="w-10 h-10 rounded-xl overflow-hidden bg-black border border-[#F5C000]/30 flex items-center justify-center flex-shrink-0 p-0.5">
-            <img src="./logo.png" alt="AllesBau Logo" class="w-full h-full object-contain">
+          <div class="w-9 h-9 rounded-xl overflow-hidden bg-white dark:bg-[#151b22] border border-slate-200/80 dark:border-[#2a3644] flex items-center justify-center flex-shrink-0 p-0.5 shadow-sm">
+            <img src="./logo.jpg" alt="AllesBau Logo" class="w-full h-full object-contain">
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-1.5">
-              <span class="text-base font-black tracking-tight text-white leading-none">alles<span class="text-[#F5C000]">Bau</span></span>
-              <span onclick="openModal('serverConfig')" class="cursor-pointer text-[10px] font-bold px-1.5 py-0.5 rounded-full ${getApiBaseUrl() ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/50' : 'bg-[#1e1e1e] text-[#666] border border-[#2a2a2a]'}" title="Backend konfigurieren">
-                ${getApiBaseUrl() ? '🟢' : '💾'}
-              </span>
+              <span class="text-sm font-black tracking-tight text-[#455A64] dark:text-slate-100 leading-none">alles<span class="text-[#F5A623]">Bau</span></span>
+              <span class="text-[9px] font-bold text-slate-400 dark:text-slate-500 tracking-wider uppercase">BAU</span>
             </div>
-            <div class="text-[11px] text-[#888] leading-tight truncate max-w-[130px]">
-              ${activeCount > 0 ? `<span class="text-emerald-400 font-semibold flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse inline-block"></span>${activeCount} Aktiv</span>` : `<span>${user?.company_name || 'AllesBau'}</span>`}
+            <div class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight truncate max-w-[140px] mt-0.5">
+              ${user?.company_name || 'AllesBau'}
             </div>
           </div>
         </div>
 
-        <!-- Right: Language + Sync + User -->
-        <div class="flex items-center gap-1.5 flex-shrink-0">
-          <button onclick="toggleLanguage()" 
-            class="px-2.5 py-1.5 rounded-full border border-[#2a2a2a] bg-[#1a1a1a] text-[11px] font-bold text-[#F5C000] hover:text-white hover:border-[#F5C000]/60 transition active-press flex items-center gap-1 shadow-sm"
-            title="Sprache wechseln / Switch Language">
-            <span>${currentLang === 'de' ? '🇩🇪 DE' : '🇬🇧 EN'}</span>
-          </button>
-          <button onclick="syncDataWithServer(); showToast('Daten aktualisiert! 🔄', 'info');" 
-            title="Synchronisieren" class="p-1.5 rounded-full text-[#555] hover:text-white hover:bg-[#1e1e1e] border border-[#222] transition active-press">
+        <!-- Right: Active Status Pill + Settings Icon -->
+        <div class="flex items-center gap-2 flex-shrink-0">
+          ${activeCount > 0 ? `
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 dark:border-emerald-800/40 text-[10px] font-bold">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span>
+              ${activeCount} Aktiv
+            </span>
+          ` : ''}
+
+          <!-- Settings Gear Button -->
+          <button onclick="openModal('settingsModal')" 
+            class="w-8 h-8 rounded-full flex items-center justify-center bg-white dark:bg-[#161f28] hover:bg-slate-100 dark:hover:bg-[#1f2b38] text-slate-600 dark:text-slate-300 transition active-press border border-slate-200/90 dark:border-[#263442] shadow-sm"
+            title="${t('settings_title', 'Einstellungen')}">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
             </svg>
-          </button>
-          <button onclick="openModal('userProfile')" 
-            class="flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-[#2a2a2a] bg-[#1a1a1a] text-xs font-semibold text-[#aaa] hover:text-white hover:border-[#F5C000]/40 transition active-press">
-            <span>${roleIcon}</span>
-            <span class="max-w-[70px] truncate">${user?.name?.split(' ')[0] || user?.name}</span>
-            <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </button>
         </div>
       </div>
@@ -2116,33 +2172,34 @@ function renderHome() {
     const fin = calculateWorkerFinancials(user.id);
 
     return `
-      <div class="space-y-4">
-        <div class="bg-slate-800/80 border border-slate-700/70 rounded-2xl p-5 shadow-lg">
+      <div class="space-y-3.5">
+        <!-- Worker Overview Card -->
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-3xl p-4 sm:p-5 shadow-sm text-slate-800 dark:text-slate-100">
           <div class="flex items-start justify-between">
             <div>
-              <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">${t('worker_portal', 'Mitarbeiter-Portal')}</span>
-              <h2 class="text-2xl font-bold text-white mt-0.5">${user.name}</h2>
-              <p class="text-xs text-slate-400 mt-0.5">${t('logged_in_as', 'Angemeldet als:')} <span class="text-slate-200 font-semibold">${user.username}</span></p>
+              <span class="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-[#F5A623]">${t('worker_portal', 'Mitarbeiter-Portal')}</span>
+              <h2 class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">${user.name}</h2>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${t('logged_in_as', 'Angemeldet als:')} <span class="text-slate-700 dark:text-slate-300 font-mono">@${user.username}</span></p>
             </div>
             <div class="text-right">
-              <span class="text-xs text-slate-400">${t('balance_remaining', 'Offener Lohnanspruch')}</span>
-              <div class="text-xl font-bold text-emerald-400 mt-0.5">${formatCurrency(fin.balance)}</div>
+              <span class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">${t('balance_remaining', 'Offener Anspruch')}</span>
+              <div class="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">${formatCurrency(fin.balance)}</div>
             </div>
           </div>
 
-          <div class="mt-4 pt-4 border-t border-slate-700/60 flex items-center justify-between">
+          <div class="mt-3.5 pt-3 border-t border-slate-100 dark:border-[#1e2733] flex items-center justify-between">
             <div>
-              <span class="text-xs text-slate-400 block">${t('today_status', 'Heutiger Status')}</span>
+              <span class="text-[10px] text-slate-400 dark:text-slate-500 block uppercase font-bold">${t('today_status', 'Status Heute')}</span>
               ${isRunning ? `
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 mt-1">
-                  <span class="w-2 h-2 rounded-full bg-emerald-400 live-pulse"></span> ${t('active_now', 'Aktiv (Eingestempelt)')}
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 mt-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span> ${t('active_now', 'Aktiv (Eingestempelt)')}
                 </span>
               ` : isPaused ? `
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50 mt-1">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 mt-1">
                   ⏸️ ${t('on_break', 'In Pause')}
                 </span>
               ` : `
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-700/60 text-slate-300 mt-1">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-[#1a222c] text-slate-500 dark:text-slate-400 mt-1">
                   ⚪ ${t('not_clocked_in', 'Nicht eingestempelt')}
                 </span>
               `}
@@ -2150,8 +2207,8 @@ function renderHome() {
 
             ${(isRunning || isPaused) ? `
               <div class="text-right">
-                <span class="text-xs text-slate-400 block">${t('shift_clock', 'Laufende Arbeitszeit')}</span>
-                <span class="text-2xl font-mono font-bold text-emerald-400" data-live-timer="${user.id}">
+                <span class="text-[10px] text-slate-400 dark:text-slate-500 block uppercase font-bold">${t('shift_clock', 'Laufende Zeit')}</span>
+                <span class="text-lg sm:text-xl font-mono font-bold text-emerald-600 dark:text-emerald-400" data-live-timer="${user.id}">
                   ${formatElapsedSeconds(getWorkerElapsedSeconds(user.id))}
                 </span>
               </div>
@@ -2159,22 +2216,23 @@ function renderHome() {
           </div>
         </div>
 
+        <!-- Today shifts list -->
         <div class="space-y-2">
-          <h3 class="text-sm font-semibold text-slate-300 px-1">${t('today_shifts', 'Heutige erfasste Schichten')}</h3>
+          <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">${t('today_shifts', 'Heutige Schichten')}</h3>
           ${todayShifts.length === 0 ? `
-            <div class="bg-slate-800/40 border border-slate-800 rounded-xl p-6 text-center text-slate-400 text-sm">
+            <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-5 text-center text-slate-400 text-xs shadow-sm">
               ${t('no_shifts_today', 'Heute noch keine Schichten abgeschlossen.')}
             </div>
           ` : todayShifts.map(s => `
-            <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-4 flex items-center justify-between">
+            <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-3 flex items-center justify-between shadow-sm">
               <div>
-                <div class="text-sm font-semibold text-white">${s.startTime} - ${s.endTime} (${s.totalHours} Std.)</div>
-                <div class="text-xs text-slate-400 mt-0.5">${s.note || 'Reguläre Schicht'}</div>
+                <div class="text-xs font-bold text-slate-900 dark:text-white">${s.startTime} - ${s.endTime} (${s.totalHours} Std.)</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${s.note || 'Reguläre Schicht'}</div>
               </div>
               <div>
-                ${s.status === 'approved' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-700/50">🟢 ${t('status_approved', 'Genehmigt')}</span>`
-                : s.status === 'rejected' ? `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-900/60 text-red-300 border border-red-700/50">🔴 ${t('status_rejected', 'Abgelehnt')}</span>`
-                : `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-900/60 text-amber-300 border border-amber-700/50">🟡 ${t('status_pending', 'Ausstehend')}</span>`}
+                ${s.status === 'approved' ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">🟢 ${t('status_approved', 'Genehmigt')}</span>`
+                : s.status === 'rejected' ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">🔴 ${t('status_rejected', 'Abgelehnt')}</span>`
+                : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">🟡 ${t('status_pending', 'Ausstehend')}</span>`}
               </div>
             </div>
           `).join('')}
@@ -2190,24 +2248,24 @@ function renderHome() {
     <div class="space-y-3">
       <div class="flex items-center justify-between px-1">
         <div class="flex items-center gap-2">
-          <h2 class="text-xs font-bold tracking-wider uppercase text-slate-400">${t('crew_workers', 'Mitarbeiter-Team')} (${activeWorkers.length})</h2>
+          <h2 class="text-[11px] font-bold tracking-wider uppercase text-slate-500 dark:text-slate-400">${t('crew_workers', 'Mitarbeiter-Team')} (${activeWorkers.length})</h2>
           ${activeRunningCount > 0 ? `
-            <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-pulse"></span>
+            <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/20 dark:border-emerald-800/40 px-2 py-0.5 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 live-pulse"></span>
               ${activeRunningCount} ${t('active_workers_count', 'aktiv')}
             </span>
           ` : ''}
         </div>
         ${isSupervisor ? `
-          <span class="text-xs text-purple-400 font-semibold bg-purple-900/30 px-2.5 py-0.5 rounded-full border border-purple-800/50">${t('supervisor_view', 'Supervisor-Ansicht')}</span>
+          <span class="text-[10px] text-purple-600 dark:text-purple-400 font-semibold bg-purple-500/10 px-2.5 py-0.5 rounded-full border border-purple-500/20">${t('supervisor_view', 'Supervisor')}</span>
         ` : ''}
       </div>
 
       <div class="space-y-2">
         ${activeWorkers.length === 0 ? `
-          <div class="bg-slate-800/40 border border-slate-800 rounded-2xl p-8 text-center text-slate-400">
+          <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-3xl p-6 text-center text-slate-400 text-xs shadow-sm">
             <p>Noch keine Mitarbeiter im Team angelegt.</p>
-            ${isLeader ? `<button onclick="openModal('addUser')" class="mt-3 text-xs bg-[#F5C000] text-black px-4 py-2 rounded-xl font-bold shadow-md">+ Ersten Mitarbeiter anlegen</button>` : ''}
+            ${isLeader ? `<button onclick="openModal('addUser')" class="mt-3 text-xs bg-[#F5A623] hover:bg-[#E09618] text-black px-4 py-2 rounded-xl font-bold shadow-sm transition active-press">+ Ersten Mitarbeiter anlegen</button>` : ''}
           </div>
         ` : activeWorkers.map(w => {
           const timer = appData.timers[w.id];
@@ -2216,51 +2274,51 @@ function renderHome() {
           const elapsed = getWorkerElapsedSeconds(w.id);
 
           return `
-            <div class="bg-slate-800/70 hover:bg-slate-800 border ${isRunning ? 'border-emerald-500/60 shadow-md shadow-emerald-950/20' : isPaused ? 'border-amber-500/60' : 'border-slate-700/60'} rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-3 transition">
+            <div class="bg-white dark:bg-[#151b22] hover:bg-slate-50 dark:hover:bg-[#182029] border ${isRunning ? 'border-emerald-500/50 shadow-sm shadow-emerald-500/10' : isPaused ? 'border-amber-500/50' : 'border-slate-200/90 dark:border-[#212a35]'} rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-3 transition">
               <div class="flex items-center gap-2.5 min-w-0">
-                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 ${isRunning ? 'bg-emerald-400 live-pulse' : isPaused ? 'bg-amber-400' : 'bg-slate-500'}"></span>
+                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 ${isRunning ? 'bg-emerald-500 live-pulse' : isPaused ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'}"></span>
                 <div class="min-w-0">
                   <div class="flex items-center gap-1.5 truncate">
-                    <span class="text-sm font-bold text-white truncate">${w.name}</span>
+                    <span class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate">${w.name}</span>
                     ${isLeader ? `
                       <button onclick="openModal('editWorkerRates', '${w.id}')" 
-                        class="text-slate-400 hover:text-[#F5C000] text-xs p-0.5 rounded transition"
+                        class="text-slate-400 hover:text-[#F5A623] text-xs p-0.5 rounded transition"
                         title="Raten anpassen">
                         ✏️
                       </button>
                     ` : ''}
                   </div>
                   <div class="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
-                    <span class="font-mono text-slate-300">@${w.username}</span>
-                    ${isRunning ? `<span class="text-emerald-400 font-semibold">• ${t('running', 'Läuft')}</span>` : isPaused ? `<span class="text-amber-400 font-semibold">• ${t('pause', 'Pause')}</span>` : '<span class="text-slate-500">• Inaktiv</span>'}
+                    <span class="font-mono text-slate-500 dark:text-slate-400">@${w.username}</span>
+                    ${isRunning ? `<span class="text-emerald-600 dark:text-emerald-400 font-semibold">• ${t('running', 'Läuft')}</span>` : isPaused ? `<span class="text-amber-700 dark:text-amber-400 font-semibold">• ${t('pause', 'Pause')}</span>` : '<span class="text-slate-400">• Inaktiv</span>'}
                   </div>
                 </div>
               </div>
 
-              <div class="flex items-center gap-3 flex-shrink-0">
+              <div class="flex items-center gap-2.5 flex-shrink-0">
                 <div class="text-right">
-                  <div class="text-base sm:text-lg font-mono font-bold tracking-tight ${isRunning ? 'text-emerald-400' : isPaused ? 'text-amber-400' : 'text-slate-500'}" data-live-timer="${w.id}">
+                  <div class="text-sm sm:text-base font-mono font-bold tracking-tight ${isRunning ? 'text-emerald-600 dark:text-emerald-400' : isPaused ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}" data-live-timer="${w.id}">
                     ${formatElapsedSeconds(elapsed)}
                   </div>
                 </div>
 
                 ${isLeader ? `
-                  <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1">
                     ${!isRunning && !isPaused ? `
                       <button onclick="handleStartTimer('${w.id}')" 
-                        class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 active-press text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow transition"
+                        class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 active-press text-white px-2.5 py-1.5 rounded-xl text-xs font-bold shadow-sm transition"
                         title="Schicht starten">
                         <span>▶️</span>
                         <span>Start</span>
                       </button>
                     ` : `
                       <button onclick="handlePauseTimer('${w.id}')" 
-                        class="flex items-center gap-1 ${isPaused ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-amber-600 hover:bg-amber-500'} active-press text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold transition"
+                        class="flex items-center gap-1 ${isPaused ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-amber-600 hover:bg-amber-500'} active-press text-white px-2 py-1.5 rounded-xl text-xs font-semibold transition"
                         title="${isPaused ? 'Fortsetzen' : 'Pause'}">
                         <span>${isPaused ? '▶️' : '⏸️'}</span>
                       </button>
                       <button onclick="handleStopTimerPrompt('${w.id}')" 
-                        class="flex items-center gap-1 bg-red-600 hover:bg-red-500 active-press text-white px-2.5 py-1.5 rounded-lg text-xs font-semibold shadow transition"
+                        class="flex items-center gap-1 bg-red-600 hover:bg-red-500 active-press text-white px-2 py-1.5 rounded-xl text-xs font-semibold shadow-sm transition"
                         title="Schicht beenden">
                         <span>⏹️</span>
                         <span>Stop</span>
@@ -2275,16 +2333,16 @@ function renderHome() {
       </div>
 
       ${isLeader ? `
-        <!-- Action buttons moved to the bottom -->
+        <!-- Action buttons on bottom of dashboard -->
         <div class="pt-2 flex items-center gap-2">
           <button onclick="openModal('addUser')" 
-            class="flex-1 flex items-center justify-center gap-2 bg-[#1c1c1c] hover:bg-[#262626] border border-[#333] hover:border-[#F5C000]/60 active-press text-white py-3 px-3 rounded-2xl text-xs font-bold shadow-md transition">
-            <span class="text-[#F5C000] text-sm">👤+</span>
-            <span>${t('add_worker', '+ Mitarbeiter anlegen')}</span>
+            class="flex-1 flex items-center justify-center gap-1.5 bg-white dark:bg-[#151b22] hover:bg-slate-50 dark:hover:bg-[#1c2430] border border-slate-200/90 dark:border-[#263442] active-press text-slate-800 dark:text-white py-2.5 px-3 rounded-2xl text-xs font-bold shadow-sm transition">
+            <span class="text-[#F5A623] text-sm">👤+</span>
+            <span>${t('add_worker', '+ Mitarbeiter')}</span>
           </button>
           <button onclick="openModal('manualShift')" 
-            class="flex-1 flex items-center justify-center gap-2 bg-[#1c1c1c] hover:bg-[#262626] border border-[#333] hover:border-[#F5C000]/60 active-press text-white py-3 px-3 rounded-2xl text-xs font-bold shadow-md transition">
-            <span class="text-[#F5C000] text-sm">⏱️</span>
+            class="flex-1 flex items-center justify-center gap-1.5 bg-white dark:bg-[#151b22] hover:bg-slate-50 dark:hover:bg-[#1c2430] border border-slate-200/90 dark:border-[#263442] active-press text-slate-800 dark:text-white py-2.5 px-3 rounded-2xl text-xs font-bold shadow-sm transition">
+            <span class="text-[#F5A623] text-sm">⏱️</span>
             <span>${t('manual_entry', '+ Schicht eintragen')}</span>
           </button>
         </div>
@@ -2737,22 +2795,22 @@ function renderCalendar() {
   const pendingCount = monthShifts.filter(s => s.status === 'pending').length;
 
   return `
-    <div class="space-y-4">
+    <div class="space-y-3.5">
       
       <!-- Month Navigation & Report Action Header -->
-      <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-4 shadow-lg space-y-3">
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-3xl p-4 shadow-sm space-y-3 text-slate-800 dark:text-slate-100">
         <div class="flex items-center justify-between">
-          <button onclick="changeMonth(-1)" class="p-2 text-slate-300 hover:bg-[#222] rounded-xl transition active-press">◀</button>
+          <button onclick="changeMonth(-1)" class="w-8 h-8 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1e2733] transition active-press border border-slate-200 dark:border-transparent">◀</button>
           <div class="text-center">
-            <h2 class="text-base font-extrabold text-white">${formatMonthYear(appState.selectedMonth)}</h2>
-            <span class="text-[11px] text-[#888] font-medium">${monthShifts.length} ${t('cal_month_shifts', 'Schichten im Monat')}</span>
+            <h2 class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">${formatMonthYear(appState.selectedMonth)}</h2>
+            <span class="text-[10px] text-slate-400 dark:text-slate-500 font-semibold">${monthShifts.length} ${t('cal_month_shifts', 'Schichten im Monat')}</span>
           </div>
-          <button onclick="changeMonth(1)" class="p-2 text-slate-300 hover:bg-[#222] rounded-xl transition active-press">▶</button>
+          <button onclick="changeMonth(1)" class="w-8 h-8 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1e2733] transition active-press border border-slate-200 dark:border-transparent">▶</button>
         </div>
 
         <!-- 1-Page Monthly PDF Report Generator Button (Always German document) -->
         <button onclick="handleTriggerMonthlyReport()" 
-          class="w-full bg-gradient-to-r from-[#F5C000] to-[#e6b400] hover:from-[#ffd333] hover:to-[#F5C000] text-black font-black px-4 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#F5C000]/15 active-press transition">
+          class="w-full bg-gradient-to-r from-[#F5A623] to-[#E09618] hover:from-[#ffd333] hover:to-[#F5A623] text-black font-extrabold px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm active-press transition">
           <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
@@ -2760,11 +2818,11 @@ function renderCalendar() {
         </button>
 
         <!-- Filter Controls -->
-        <div class="pt-3 border-t border-[#222] grid grid-cols-2 gap-2">
+        <div class="pt-2.5 border-t border-slate-100 dark:border-[#1e2733] grid grid-cols-2 gap-2">
           ${!isWorker ? `
             <div>
-              <label class="text-[10px] uppercase font-bold text-[#888] block mb-1">${t('filter_worker', 'Mitarbeiter')}</label>
-              <select onchange="appState.calendarWorkerFilter=this.value; renderApp();" class="w-full bg-[#1c1c1c] text-white text-xs border border-[#333] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5C000]/60">
+              <label class="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-500 block mb-1">${t('filter_worker', 'Mitarbeiter')}</label>
+              <select onchange="appState.calendarWorkerFilter=this.value; renderApp();" class="w-full bg-slate-50 dark:bg-[#1a222c] text-slate-900 dark:text-white text-xs border border-slate-200 dark:border-[#2c3846] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5A623]">
                 <option value="all" ${appState.calendarWorkerFilter === 'all' ? 'selected' : ''}>${t('all_workers', 'Alle Mitarbeiter')}</option>
                 ${appData.workers.filter(w => w.role === 'worker').map(w => `<option value="${w.id}" ${appState.calendarWorkerFilter === w.id ? 'selected' : ''}>${w.name}</option>`).join('')}
               </select>
@@ -2772,8 +2830,8 @@ function renderCalendar() {
           ` : ''}
 
           <div class="${isWorker ? 'col-span-2' : ''}">
-            <label class="text-[10px] uppercase font-bold text-[#888] block mb-1">${t('filter_status', 'Status Filter')}</label>
-            <select onchange="appState.calendarStatusFilter=this.value; renderApp();" class="w-full bg-[#1c1c1c] text-white text-xs border border-[#333] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5C000]/60">
+            <label class="text-[9px] uppercase font-bold text-slate-400 dark:text-slate-500 block mb-1">${t('filter_status', 'Status Filter')}</label>
+            <select onchange="appState.calendarStatusFilter=this.value; renderApp();" class="w-full bg-slate-50 dark:bg-[#1a222c] text-slate-900 dark:text-white text-xs border border-slate-200 dark:border-[#2c3846] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5A623]">
               <option value="all" ${appState.calendarStatusFilter === 'all' ? 'selected' : ''}>${t('all_status', 'Alle Status')}</option>
               <option value="pending" ${appState.calendarStatusFilter === 'pending' ? 'selected' : ''}>🟡 ${t('status_pending', 'Ausstehend (Pending)')}</option>
               <option value="approved" ${appState.calendarStatusFilter === 'approved' ? 'selected' : ''}>🟢 ${t('status_approved', 'Genehmigt (Approved)')}</option>
@@ -2786,51 +2844,51 @@ function renderCalendar() {
       <!-- 4 Stat Cards: Approved All Time, Approved Month, Work Days Month, Pending Hours -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <!-- 1. Approved All Time -->
-        <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-[#F5C000] font-bold uppercase block truncate">${t('stat_total_approved_all_time', 'Genehmigt (Gesamt)')}</span>
-          <div class="text-base font-black text-white mt-0.5">${totalApprovedHoursAllTime.toFixed(1)} Std.</div>
-          <div class="text-[10px] text-[#888] mt-0.5">${t('all_time', 'Alle Zeiten')}</div>
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+          <span class="text-[9px] text-amber-600 dark:text-[#F5A623] font-bold uppercase block truncate">${t('stat_total_approved_all_time', 'Genehmigt (Gesamt)')}</span>
+          <div class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white mt-0.5">${totalApprovedHoursAllTime.toFixed(1)} Std.</div>
+          <div class="text-[9px] text-slate-400 mt-0.5">${t('all_time', 'Alle Zeiten')}</div>
         </div>
 
         <!-- 2. Approved Current Month -->
-        <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-emerald-400 font-bold uppercase block truncate">${t('stat_approved_month', 'Genehmigt (Monat)')}</span>
-          <div class="text-base font-black text-emerald-400 mt-0.5">${approvedHoursCurrentMonth.toFixed(1)} Std.</div>
-          <div class="text-[10px] text-slate-400 mt-0.5">${formatMonthYear(appState.selectedMonth)}</div>
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+          <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold uppercase block truncate">${t('stat_approved_month', 'Genehmigt (Monat)')}</span>
+          <div class="text-sm sm:text-base font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">${approvedHoursCurrentMonth.toFixed(1)} Std.</div>
+          <div class="text-[9px] text-slate-400 mt-0.5">${formatMonthYear(appState.selectedMonth)}</div>
         </div>
 
         <!-- 3. Work Days Current Month -->
-        <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-blue-400 font-bold uppercase block truncate">${t('stat_work_days_month', 'Arbeitstage (Monat)')}</span>
-          <div class="text-base font-black text-blue-300 mt-0.5">${workDaysCurrentMonth} Tage</div>
-          <div class="text-[10px] text-slate-400 mt-0.5">${t('this_month', 'im Monat')}</div>
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+          <span class="text-[9px] text-blue-600 dark:text-blue-400 font-bold uppercase block truncate">${t('stat_work_days_month', 'Arbeitstage')}</span>
+          <div class="text-sm sm:text-base font-extrabold text-blue-600 dark:text-blue-300 mt-0.5">${workDaysCurrentMonth} Tage</div>
+          <div class="text-[9px] text-slate-400 mt-0.5">${t('this_month', 'im Monat')}</div>
         </div>
 
         <!-- 4. Pending Hours -->
-        <div class="bg-[#141414] border border-[#2a2a2a] rounded-2xl p-3 text-center">
-          <span class="text-[10px] text-amber-400 font-bold uppercase block truncate">${t('stat_pending_hours', 'Ausstehend (Std.)')}</span>
-          <div class="text-base font-black text-amber-300 mt-0.5">${pendingHoursMonth.toFixed(1)} Std.</div>
-          <div class="text-[10px] text-slate-400 mt-0.5">${pendingCount} ${t('under_review', 'Zur Prüfung')}</div>
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-2.5 sm:p-3 text-center shadow-sm">
+          <span class="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase block truncate">${t('stat_pending_hours', 'Ausstehend (Std.)')}</span>
+          <div class="text-sm sm:text-base font-extrabold text-amber-600 dark:text-amber-300 mt-0.5">${pendingHoursMonth.toFixed(1)} Std.</div>
+          <div class="text-[9px] text-slate-400 mt-0.5">${pendingCount} ${t('under_review', 'Zur Prüfung')}</div>
         </div>
       </div>
 
       ${canApprove && pendingCount > 0 ? `
-        <div class="bg-amber-950/40 border border-amber-800/60 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+        <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between shadow-sm">
           <div>
-            <div class="text-xs font-bold text-amber-300">🟡 ${pendingCount} ${t('pending_approval_notice', 'ausstehende Schichten zur Prüfung')}</div>
-            <div class="text-[11px] text-amber-400/80">Freigabe für Monatsbericht & Lohn erforderlich</div>
+            <div class="text-xs font-bold text-amber-800 dark:text-amber-300">🟡 ${pendingCount} ${t('pending_approval_notice', 'ausstehende Schichten zur Prüfung')}</div>
+            <div class="text-[10px] text-amber-700/80 dark:text-amber-400/80">Freigabe für Monatsbericht & Lohn erforderlich</div>
           </div>
-          <button onclick="handleApproveAllShifts()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold active-press shadow-md transition">
+          <button onclick="handleApproveAllShifts()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl text-xs font-bold active-press shadow-sm transition">
             ${t('approve_all', 'Alle genehmigen')}
           </button>
         </div>
       ` : ''}
 
       <!-- TABLE & GROUPED DAYS CONTENT -->
-      <div class="rounded-2xl border border-[#262626] bg-[#121212] overflow-hidden shadow-xl">
+      <div class="rounded-3xl border border-slate-200/90 dark:border-[#212a35] bg-white dark:bg-[#151b22] overflow-hidden shadow-sm">
         ${(() => {
           if (selectedWorkerId !== 'all') {
-            // SINGLE WORKER VIEW: Month calendar with full day sequence & edit/delete options
+            // SINGLE WORKER VIEW
             const rowsHtml = [];
             let currentKw = null;
 
@@ -2845,14 +2903,14 @@ function renderCalendar() {
               if (kw !== currentKw) {
                 currentKw = kw;
                 rowsHtml.push(`
-                  <tr class="bg-gradient-to-r from-[#F5C000]/15 via-[#F5C000]/5 to-transparent border-y border-[#F5C000]/30 font-bold">
-                    <td colspan="${isLeader ? 7 : (isSupervisor ? 6 : 5)}" class="py-2 px-3">
-                      <div class="flex items-center justify-between text-[#F5C000] text-[11px]">
+                  <tr class="bg-amber-500/10 dark:bg-amber-500/10 border-y border-amber-500/20 font-bold">
+                    <td colspan="${isLeader ? 7 : (isSupervisor ? 6 : 5)}" class="py-1.5 px-3">
+                      <div class="flex items-center justify-between text-amber-700 dark:text-[#F5A623] text-[10px]">
                         <span class="flex items-center gap-1.5">
                           <span>📅</span>
                           <span>Kalenderwoche ${kw}</span>
                         </span>
-                        <span class="text-[10px] text-slate-400 font-normal">Woche ${kw}</span>
+                        <span class="text-[9px] text-slate-400 font-normal">Woche ${kw}</span>
                       </div>
                     </td>
                   </tr>
@@ -2872,47 +2930,47 @@ function renderCalendar() {
                   }
 
                   rowsHtml.push(`
-                    <tr class="hover:bg-[#181818] transition ${isWeekend ? 'bg-[#151515]' : ''}">
-                      <td class="py-2.5 px-3 whitespace-nowrap">
+                    <tr class="hover:bg-slate-50 dark:hover:bg-[#19222c] transition ${isWeekend ? 'bg-slate-50/50 dark:bg-[#12171e]' : ''}">
+                      <td class="py-2 px-3 whitespace-nowrap">
                         <div class="flex items-center gap-1.5">
-                          <span class="font-bold text-white">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
-                          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isWeekend ? 'bg-amber-950/40 text-amber-300 border border-amber-800/40' : 'bg-[#262626] text-[#F5C000] border border-[#333]'}">
+                          <span class="font-bold text-slate-900 dark:text-white text-xs">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
+                          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${isWeekend ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30' : 'bg-slate-100 dark:bg-[#202935] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">
                             ${dayName}
                           </span>
                         </div>
                       </td>
-                      <td class="py-2.5 px-3 whitespace-nowrap font-mono text-slate-200">
+                      <td class="py-2 px-3 whitespace-nowrap font-mono text-xs text-slate-800 dark:text-slate-200">
                         <div>${s.startTime || s.start_time} - ${s.endTime || s.end_time}</div>
-                        ${s.note ? `<div class="text-[10px] text-[#777] italic truncate max-w-[140px]">"${s.note}"</div>` : ''}
+                        ${s.note ? `<div class="text-[10px] text-slate-400 italic truncate max-w-[130px]">"${s.note}"</div>` : ''}
                         ${photosCount > 0 ? `
-                          <button onclick="openShiftMediaViewer('${s.id}')" class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-950/70 border border-blue-700/60 text-blue-300 text-[10px] font-bold hover:bg-blue-900 transition">
+                          <button onclick="openShiftMediaViewer('${s.id}')" class="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-300 text-[9px] font-bold hover:bg-blue-500/20 transition">
                             <span>📷</span> <span>${photosCount} Fotos</span>
                           </button>
                         ` : ''}
                       </td>
-                      <td class="py-2.5 px-3 text-center whitespace-nowrap text-slate-400">
+                      <td class="py-2 px-3 text-center whitespace-nowrap text-xs text-slate-400">
                         ${(s.breakMinutes ?? s.break_minutes ?? 0) > 0 ? `${s.breakMinutes ?? s.break_minutes}m` : '-'}
                       </td>
-                      <td class="py-2.5 px-3 text-right whitespace-nowrap font-bold ${s.status === 'approved' ? 'text-emerald-400' : 'text-[#F5C000]'}">
+                      <td class="py-2 px-3 text-right whitespace-nowrap text-xs font-bold ${s.status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-[#F5A623]'}">
                         ${(s.totalHours || s.total_hours || 0).toFixed(1)} Std.
                       </td>
-                      <td class="py-2.5 px-3 text-center whitespace-nowrap">
+                      <td class="py-2 px-3 text-center whitespace-nowrap">
                         ${s.status === 'approved' 
-                          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 inline-flex items-center gap-1">🟢 Genehmigt</span>`
+                          ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 inline-flex items-center gap-1">🟢 Genehmigt</span>`
                           : s.status === 'rejected'
-                          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/70 text-red-400 border border-red-800/60 inline-flex items-center gap-1">🔴 Abgelehnt</span>`
-                          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60 inline-flex items-center gap-1">🟡 Ausstehend</span>`}
+                          ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 inline-flex items-center gap-1">🔴 Abgelehnt</span>`
+                          : `<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1">🟡 Ausstehend</span>`}
                       </td>
                       ${(isLeader || isSupervisor) ? `
-                        <td class="py-2.5 px-3 text-right whitespace-nowrap">
-                          <div class="flex items-center justify-end gap-1.5">
+                        <td class="py-2 px-3 text-right whitespace-nowrap">
+                          <div class="flex items-center justify-end gap-1">
                             ${isSupervisor && s.status === 'pending' ? `
                               <button onclick="handleApproveShift('${s.id}')" title="Genehmigen" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded-lg text-xs font-bold active-press">✓</button>
                               <button onclick="handleRejectShift('${s.id}')" title="Ablehnen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press">✕</button>
                             ` : ''}
                             ${isLeader ? `
-                              <button onclick="openEditShiftModal('${s.id}')" title="Bearbeiten" class="bg-blue-600/80 hover:bg-blue-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">✏️</button>
-                              <button onclick="handleDeleteShift('${s.id}')" title="Löschen" class="bg-red-600/80 hover:bg-red-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">🗑️</button>
+                              <button onclick="openEditShiftModal('${s.id}')" title="Bearbeiten" class="bg-blue-600 hover:bg-blue-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">✏️</button>
+                              <button onclick="handleDeleteShift('${s.id}')" title="Löschen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">🗑️</button>
                             ` : ''}
                           </div>
                         </td>
@@ -2922,22 +2980,22 @@ function renderCalendar() {
                 });
               } else if (appState.calendarStatusFilter === 'all') {
                 rowsHtml.push(`
-                  <tr class="hover:bg-[#161616] transition opacity-70 ${isWeekend ? 'bg-[#131313]' : ''}">
-                    <td class="py-2 px-3 whitespace-nowrap">
+                  <tr class="hover:bg-slate-50 dark:hover:bg-[#161c24] transition opacity-70 ${isWeekend ? 'bg-slate-50/40 dark:bg-[#11161d]' : ''}">
+                    <td class="py-1.5 px-3 whitespace-nowrap">
                       <div class="flex items-center gap-1.5">
-                        <span class="text-[#777]">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
-                        <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold ${isWeekend ? 'bg-slate-900 text-slate-500 border border-slate-800' : 'bg-[#1e1e1e] text-[#888]'}">
+                        <span class="text-slate-400 text-xs">${String(d).padStart(2, '0')}.${String(month).padStart(2, '0')}.</span>
+                        <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold ${isWeekend ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 'bg-slate-100 dark:bg-[#1a222c] text-slate-500'}">
                           ${dayName}
                         </span>
                       </div>
                     </td>
-                    <td class="py-2 px-3 text-slate-600">—</td>
-                    <td class="py-2 px-3 text-center text-slate-600">—</td>
-                    <td class="py-2 px-3 text-right text-slate-600">—</td>
-                    <td class="py-2 px-3 text-center">
-                      <span class="text-slate-600 text-[10px] italic">${isWeekend ? 'Wochenende' : 'Frei'}</span>
+                    <td class="py-1.5 px-3 text-slate-400 text-xs">—</td>
+                    <td class="py-1.5 px-3 text-center text-slate-400 text-xs">—</td>
+                    <td class="py-1.5 px-3 text-right text-slate-400 text-xs">—</td>
+                    <td class="py-1.5 px-3 text-center">
+                      <span class="text-slate-400 text-[9px] italic">${isWeekend ? 'Wochenende' : 'Frei'}</span>
                     </td>
-                    ${(isLeader || isSupervisor) ? '<td class="py-2 px-3 text-right text-slate-700">—</td>' : ''}
+                    ${(isLeader || isSupervisor) ? '<td class="py-1.5 px-3 text-right text-slate-400">—</td>' : ''}
                   </tr>
                 `);
               }
@@ -2947,60 +3005,58 @@ function renderCalendar() {
               <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr class="bg-[#1a1a1a] text-[#aaa] border-b border-[#282828] font-bold uppercase tracking-wider text-[10px]">
-                      <th class="py-2.5 px-3">${t('col_date', 'Datum / Tag')}</th>
-                      <th class="py-2.5 px-3">${t('col_time', 'Arbeitszeit')}</th>
-                      <th class="py-2.5 px-3 text-center">${t('col_break', 'Pause')}</th>
-                      <th class="py-2.5 px-3 text-right">${t('col_hours', 'Stunden')}</th>
-                      <th class="py-2.5 px-3 text-center">${t('col_status', 'Status')}</th>
-                      ${(isLeader || isSupervisor) ? `<th class="py-2.5 px-3 text-right">${t('col_actions', 'Aktion')}</th>` : ''}
+                    <tr class="bg-slate-50 dark:bg-[#12171e] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-[#212a35] font-bold uppercase tracking-wider text-[9px]">
+                      <th class="py-2 px-3">${t('col_date', 'Datum / Tag')}</th>
+                      <th class="py-2 px-3">${t('col_time', 'Arbeitszeit')}</th>
+                      <th class="py-2 px-3 text-center">${t('col_break', 'Pause')}</th>
+                      <th class="py-2 px-3 text-right">${t('col_hours', 'Stunden')}</th>
+                      <th class="py-2 px-3 text-center">${t('col_status', 'Status')}</th>
+                      ${(isLeader || isSupervisor) ? `<th class="py-2 px-3 text-right">${t('col_actions', 'Aktion')}</th>` : ''}
                     </tr>
                   </thead>
-                  <tbody class="divide-y divide-[#202020]">
+                  <tbody class="divide-y divide-slate-100 dark:divide-[#1d2530]">
                     ${rowsHtml.join('')}
                   </tbody>
                 </table>
               </div>
             `;
           } else {
-            // ALL WORKERS DEFAULT VIEW: Group shifts by Day into Collapsible Rows (Requirement 6)
+            // ALL WORKERS DEFAULT VIEW: Group shifts by Day into Collapsible Rows
             if (filteredShifts.length === 0) {
               return `
-                <div class="p-8 text-center text-slate-500 text-xs">
-                  ${t('no_shifts_month', 'Keine Schichten für diesen Monat gefunden. Tippe auf "+ Schicht eintragen", um Daten manuell einzufügen.')}
+                <div class="p-6 text-center text-slate-400 text-xs">
+                  ${t('no_shifts_month', 'Keine Schichten für diesen Monat gefunden.')}
                 </div>
               `;
             }
 
-            // Group shifts by date (YYYY-MM-DD)
             const groupedByDate = {};
             filteredShifts.forEach(s => {
               if (!groupedByDate[s.date]) groupedByDate[s.date] = [];
               groupedByDate[s.date].push(s);
             });
 
-            // Sort dates descending
             const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
             let currentKw = null;
 
             return `
-              <!-- Quick Collapse / Expand All Toolbar (Requirement 3: Folded by default) -->
-              <div class="bg-[#171717] px-3.5 py-2 border-b border-[#262626] flex items-center justify-between text-xs">
-                <span class="text-slate-400 font-semibold text-[11px]">${sortedDates.length} Arbeitstage im Monat</span>
+              <!-- Quick Collapse / Expand All Toolbar -->
+              <div class="bg-slate-50 dark:bg-[#11161d] px-3.5 py-2 border-b border-slate-200/80 dark:border-[#212a35] flex items-center justify-between text-xs">
+                <span class="text-slate-500 dark:text-slate-400 font-semibold text-[10px]">${sortedDates.length} Arbeitstage im Monat</span>
                 <div class="flex items-center gap-2">
                   <button type="button" onclick="toggleAllCalendarDays(true)" 
-                    class="text-[#F5C000] hover:underline font-bold text-[11px] flex items-center gap-1 active-press">
+                    class="text-amber-700 dark:text-[#F5A623] hover:underline font-bold text-[10px] flex items-center gap-1 active-press">
                     <span>🔽</span> <span>${t('unfold_all', 'Alle aufklappen')}</span>
                   </button>
-                  <span class="text-slate-600">|</span>
+                  <span class="text-slate-300 dark:text-slate-600">|</span>
                   <button type="button" onclick="toggleAllCalendarDays(false)" 
-                    class="text-slate-400 hover:text-white text-[11px] flex items-center gap-1 active-press">
+                    class="text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white text-[10px] flex items-center gap-1 active-press">
                     <span>🔼</span> <span>${t('fold_all', 'Alle zuklappen')}</span>
                   </button>
                 </div>
               </div>
 
-              <div class="divide-y divide-[#202020]">
+              <div class="divide-y divide-slate-100 dark:divide-[#1e2733]">
                 ${sortedDates.map(dateStr => {
                   const dayShifts = groupedByDate[dateStr];
                   const dParts = dateStr.split('-');
@@ -3010,15 +3066,12 @@ function renderCalendar() {
                   const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
                   const kw = getWeekNumber(dObj);
 
-                  // Unique workers on this day
                   const workerIdsOnDay = Array.from(new Set(dayShifts.map(s => s.workerId || s.worker_id)));
                   const dayTotalHours = dayShifts.reduce((sum, s) => sum + (parseFloat(s.totalHours ?? s.total_hours) || 0), 0);
                   
-                  // Collect comments
                   const notesList = dayShifts.map(s => s.note).filter(n => n && n.trim() && n !== 'Live timer shift');
                   const firstNote = notesList.length > 0 ? notesList[0] : (dayShifts[0]?.note || '');
 
-                  // Collect day media
                   const dayMedia = [];
                   dayShifts.forEach(s => {
                     if (s.media) {
@@ -3035,92 +3088,90 @@ function renderCalendar() {
                     }
                   });
 
-                  // Status summary
                   const allApproved = dayShifts.every(s => s.status === 'approved');
                   const hasPending = dayShifts.some(s => s.status === 'pending');
                   const hasRejected = dayShifts.some(s => s.status === 'rejected');
 
-                  // Expansion state: FOLDED UP BY DEFAULT (Requirement 3)
                   const isExpanded = appState.expandedCalendarDays[dateStr] ?? false;
 
                   let weekHeader = '';
                   if (kw !== currentKw) {
                     currentKw = kw;
                     weekHeader = `
-                      <div class="bg-gradient-to-r from-[#F5C000]/15 via-[#F5C000]/5 to-transparent px-4 py-2 border-y border-[#F5C000]/30 font-bold text-[#F5C000] text-xs flex items-center justify-between">
+                      <div class="bg-amber-500/10 px-3.5 py-1.5 border-y border-amber-500/20 font-bold text-amber-700 dark:text-[#F5A623] text-[10px] flex items-center justify-between">
                         <span>📅 Kalenderwoche ${kw}</span>
-                        <span class="text-[10px] text-slate-400 font-normal">Woche ${kw}</span>
+                        <span class="text-[9px] text-slate-400 font-normal">Woche ${kw}</span>
                       </div>
                     `;
                   }
 
                   return `
                     ${weekHeader}
-                    <div class="border-b border-[#222]">
+                    <div>
                       <!-- Main Collapsible Day Header Row -->
                       <div onclick="toggleCalendarDay('${dateStr}')" 
-                        class="p-3 bg-[#161616] hover:bg-[#1a1a1a] cursor-pointer transition flex flex-wrap items-center justify-between gap-2 select-none">
+                        class="p-2.5 sm:p-3 bg-white dark:bg-[#151b22] hover:bg-slate-50 dark:hover:bg-[#1a232d] cursor-pointer transition flex flex-wrap items-center justify-between gap-2 select-none">
                         
                         <!-- Left: Date & Workers Summary -->
-                        <div class="flex items-center gap-2.5">
-                          <button type="button" class="text-slate-400 hover:text-white text-xs transition transform ${isExpanded ? 'rotate-90' : ''}">
+                        <div class="flex items-center gap-2">
+                          <button type="button" class="text-slate-400 hover:text-slate-600 dark:hover:text-white text-xs transition transform ${isExpanded ? 'rotate-90' : ''}">
                             ▶
                           </button>
                           
                           <div class="flex items-center gap-1.5">
-                            <span class="font-black text-white text-sm">${dParts[2]}.${dParts[1]}.</span>
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isWeekend ? 'bg-amber-950/40 text-amber-300 border border-amber-800/40' : 'bg-[#262626] text-[#F5C000] border border-[#333]'}">
+                            <span class="font-extrabold text-slate-900 dark:text-white text-xs">${dParts[2]}.${dParts[1]}.</span>
+                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${isWeekend ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30' : 'bg-slate-100 dark:bg-[#1e2632] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'}">
                               ${dayName}
                             </span>
                           </div>
 
-                          <div class="flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700/60 text-xs font-bold text-slate-200">
+                          <div class="flex items-center gap-1 bg-slate-100 dark:bg-[#1a222c] px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-200">
                             <span>👷</span> <span>${workerIdsOnDay.length} ${t('workers_count', 'Arbeiter')}</span>
                           </div>
                         </div>
 
                         <!-- Center: Total Hours & Comments -->
-                        <div class="flex items-center gap-3">
-                          <div class="text-xs font-black ${allApproved ? 'text-emerald-400' : 'text-[#F5C000]'}">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                          <div class="text-xs font-black ${allApproved ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-[#F5A623]'}">
                             ${dayTotalHours.toFixed(1)} Std.
                           </div>
 
                           ${firstNote ? `
-                            <div class="hidden sm:block text-[11px] text-[#888] italic truncate max-w-[160px]" title="${firstNote}">
+                            <div class="hidden sm:block text-[10px] text-slate-400 italic truncate max-w-[140px]" title="${firstNote}">
                               💬 "${firstNote}"
                             </div>
                           ` : ''}
 
-                          <!-- Media button (if photos uploaded) -->
+                          <!-- Media button -->
                           ${dayMedia.length > 0 ? `
                             <button onclick="event.stopPropagation(); openDateMediaViewer('${dateStr}')" 
-                              class="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-950/70 hover:bg-blue-900 border border-blue-700/60 text-blue-300 text-[11px] font-bold active-press shadow-sm transition">
-                              <span>📷</span> <span>${dayMedia.length} ${t('show_photos', 'Fotos')}</span>
+                              class="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-600 dark:text-blue-300 text-[10px] font-bold active-press transition">
+                              <span>📷</span> <span>${dayMedia.length} Fotos</span>
                             </button>
                           ` : ''}
 
                           <!-- Status Pill -->
                           <div>
                             ${allApproved ? `
-                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60">
-                                🟢 ${t('status_approved', 'Genehmigt')}
+                              <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                🟢 Genehmigt
                               </span>
                             ` : hasPending ? `
-                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60">
-                                🟡 ${dayShifts.filter(s => s.status === 'pending').length} ${t('status_pending', 'Ausstehend')}
+                              <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                🟡 ${dayShifts.filter(s => s.status === 'pending').length} Offen
                               </span>
                             ` : `
-                              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/70 text-red-400 border border-red-800/60">
-                                🔴 ${t('status_rejected', 'Abgelehnt')}
+                              <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                                🔴 Abgelehnt
                               </span>
                             `}
                           </div>
                         </div>
                       </div>
 
-                      <!-- Collapsible Breakdown of individual worker shifts on this day -->
+                      <!-- Collapsible Breakdown -->
                       ${isExpanded ? `
-                        <div class="bg-[#101010] p-2 space-y-2 border-t border-[#1e1e1e]">
+                        <div class="bg-slate-50 dark:bg-[#0e1318] p-2 space-y-1.5 border-t border-slate-100 dark:border-[#1d2531]">
                           ${dayShifts.map(s => {
                             const w = getWorker(s.workerId || s.worker_id);
                             let shiftPhotos = 0;
@@ -3132,24 +3183,24 @@ function renderCalendar() {
                             }
 
                             return `
-                              <div class="bg-[#181818] border border-[#262626] rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 hover:border-[#383838] transition">
-                                <div class="flex items-center gap-2.5 min-w-0">
-                                  <div class="w-7 h-7 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center text-xs font-bold text-[#F5C000] flex-shrink-0">
+                              <div class="bg-white dark:bg-[#161f28] border border-slate-200/80 dark:border-[#243140] rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 shadow-sm hover:border-slate-300 dark:hover:border-slate-600 transition">
+                                <div class="flex items-center gap-2 min-w-0">
+                                  <div class="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-700 dark:text-[#F5A623] flex items-center justify-center text-xs font-bold flex-shrink-0">
                                     👷
                                   </div>
                                   <div class="min-w-0">
-                                    <div class="text-xs font-bold text-white truncate">${w ? w.name : 'Mitarbeiter'}</div>
-                                    <div class="text-[11px] font-mono text-slate-300">
+                                    <div class="text-xs font-bold text-slate-900 dark:text-white truncate">${w ? w.name : 'Mitarbeiter'}</div>
+                                    <div class="text-[10px] font-mono text-slate-600 dark:text-slate-300">
                                       ${s.startTime || s.start_time} - ${s.endTime || s.end_time} 
-                                      <span class="text-slate-500">• Pause: ${(s.breakMinutes ?? s.break_minutes ?? 0)}m</span>
+                                      <span class="text-slate-400">• Pause: ${(s.breakMinutes ?? s.break_minutes ?? 0)}m</span>
                                     </div>
-                                    ${s.note ? `<div class="text-[10px] text-[#777] italic truncate max-w-[200px]">"${s.note}"</div>` : ''}
+                                    ${s.note ? `<div class="text-[9px] text-slate-400 italic truncate max-w-[180px]">"${s.note}"</div>` : ''}
                                   </div>
                                 </div>
 
-                                <div class="flex items-center gap-2.5 flex-shrink-0">
+                                <div class="flex items-center gap-2 flex-shrink-0">
                                   <div class="text-right">
-                                    <div class="text-xs font-extrabold ${s.status === 'approved' ? 'text-emerald-400' : 'text-[#F5C000]'}">
+                                    <div class="text-xs font-bold ${s.status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-[#F5A623]'}">
                                       ${(s.totalHours || s.total_hours || 0).toFixed(1)} Std.
                                     </div>
                                     <div class="text-[9px] uppercase font-bold text-slate-400">
@@ -3158,20 +3209,20 @@ function renderCalendar() {
                                   </div>
 
                                   ${shiftPhotos > 0 ? `
-                                    <button onclick="openShiftMediaViewer('${s.id}')" class="p-1 px-2 rounded-lg bg-blue-950/70 border border-blue-700/60 text-blue-300 text-[10px] font-bold hover:bg-blue-900 transition flex items-center gap-1">
+                                    <button onclick="openShiftMediaViewer('${s.id}')" class="p-1 px-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-300 text-[9px] font-bold hover:bg-blue-500/20 transition flex items-center gap-1">
                                       <span>📷</span> <span>${shiftPhotos}</span>
                                     </button>
                                   ` : ''}
 
                                   <!-- Actions: Supervisor Approve/Reject & Leader Edit/Delete -->
-                                  <div class="flex items-center gap-1 border-l border-[#282828] pl-2">
+                                  <div class="flex items-center gap-1 border-l border-slate-200 dark:border-[#253241] pl-1.5">
                                     ${isSupervisor && s.status === 'pending' ? `
                                       <button onclick="handleApproveShift('${s.id}')" title="Genehmigen" class="bg-emerald-600 hover:bg-emerald-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">✓</button>
                                       <button onclick="handleRejectShift('${s.id}')" title="Ablehnen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">✕</button>
                                     ` : ''}
                                     ${isLeader ? `
-                                      <button onclick="openEditShiftModal('${s.id}')" title="Bearbeiten" class="bg-blue-600/80 hover:bg-blue-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">✏️</button>
-                                      <button onclick="handleDeleteShift('${s.id}')" title="Löschen" class="bg-red-600/80 hover:bg-red-600 text-white p-1.5 rounded-lg text-xs font-bold active-press shadow-sm">🗑️</button>
+                                      <button onclick="openEditShiftModal('${s.id}')" title="Bearbeiten" class="bg-blue-600 hover:bg-blue-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">✏️</button>
+                                      <button onclick="handleDeleteShift('${s.id}')" title="Löschen" class="bg-red-600 hover:bg-red-500 text-white p-1 rounded-lg text-xs font-bold active-press shadow-sm">🗑️</button>
                                     ` : ''}
                                   </div>
                                 </div>
@@ -3209,95 +3260,96 @@ function renderPayments() {
   });
 
   return `
-    <div class="space-y-4">
+    <div class="space-y-3.5">
       ${!isWorker ? `
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-3 flex items-center justify-between">
-          <label class="text-xs font-semibold text-slate-300">${t('filter_worker_balance', 'Mitarbeiter filtern:')}</label>
-          <select onchange="appState.paymentWorkerFilter=this.value; renderApp();" class="bg-slate-900 text-white text-xs border border-slate-700 rounded-xl px-3 py-1.5 focus:outline-none focus:border-[#F5C000]">
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-2.5 sm:p-3 flex items-center justify-between shadow-sm">
+          <label class="text-[11px] font-bold text-slate-500 dark:text-slate-400">${t('filter_worker_balance', 'Mitarbeiter filtern:')}</label>
+          <select onchange="appState.paymentWorkerFilter=this.value; renderApp();" class="bg-slate-50 dark:bg-[#1a222c] text-slate-900 dark:text-white text-xs border border-slate-200 dark:border-[#2c3846] rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#F5A623]">
             <option value="all" ${appState.paymentWorkerFilter === 'all' ? 'selected' : ''}>${t('all_workers', 'Alle Mitarbeiter')}</option>
             ${appData.workers.filter(w => w.role === 'worker').map(w => `<option value="${w.id}" ${appState.paymentWorkerFilter === w.id ? 'selected' : ''}>${w.name}</option>`).join('')}
           </select>
         </div>
       ` : ''}
 
-      <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/70 rounded-3xl p-5 shadow-xl space-y-4">
+      <!-- Financials Card -->
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-3xl p-4 sm:p-5 shadow-sm space-y-3.5">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">
-            ${isLeader ? 'Leader Lohnabrechnung & Gewinnübersicht' : isSupervisor ? 'Abrechnung & Ausgaben' : 'Lohn- & Auszahlungsübersicht'}
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            ${isLeader ? 'Lohnabrechnung & Gewinnübersicht' : isSupervisor ? 'Abrechnung & Ausgaben' : 'Lohn- & Auszahlungsübersicht'}
           </span>
           ${isLeader ? `
             <button onclick="openModal('logPayment')" 
-              class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active-press text-white px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-md">
+              class="flex items-center gap-1.5 bg-[#F5A623] hover:bg-[#E09618] active-press text-black px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm transition">
               <span>+ ${t('log_payment', 'Auszahlung erfassen')}</span>
             </button>
           ` : ''}
         </div>
 
         ${isLeader ? `
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-700/60 text-center">
-            <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700">
-              <span class="text-[10px] text-blue-400 uppercase font-bold block">Chef zahlt</span>
-              <span class="text-sm font-black text-blue-300 mt-0.5 block truncate">${formatCurrency(fin.totalSupervisorCost)}</span>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 dark:border-[#1e2733] text-center">
+            <div class="p-2 sm:p-2.5 rounded-xl bg-slate-50 dark:bg-[#1a222c] border border-slate-200/80 dark:border-[#283544]">
+              <span class="text-[9px] text-blue-600 dark:text-blue-400 uppercase font-bold block">Chef zahlt</span>
+              <span class="text-xs sm:text-sm font-black text-slate-800 dark:text-blue-300 mt-0.5 block truncate">${formatCurrency(fin.totalSupervisorCost)}</span>
             </div>
 
-            <div class="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700">
-              <span class="text-[10px] text-slate-300 uppercase font-bold block">${t('total_earned', 'Arbeiterlohn')}</span>
-              <span class="text-sm font-black text-slate-200 mt-0.5 block truncate">${formatCurrency(fin.totalWorkerEarned)}</span>
+            <div class="p-2 sm:p-2.5 rounded-xl bg-slate-50 dark:bg-[#1a222c] border border-slate-200/80 dark:border-[#283544]">
+              <span class="text-[9px] text-slate-500 uppercase font-bold block">${t('total_earned', 'Arbeiterlohn')}</span>
+              <span class="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-200 mt-0.5 block truncate">${formatCurrency(fin.totalWorkerEarned)}</span>
             </div>
 
-            <div class="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60">
-              <span class="text-[10px] text-amber-300 uppercase font-black block">Dein Cut</span>
-              <span class="text-sm font-black text-[#F5C000] mt-0.5 block truncate">+${formatCurrency(fin.totalLeaderCut)}</span>
+            <div class="p-2 sm:p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <span class="text-[9px] text-amber-700 dark:text-amber-400 uppercase font-black block">Dein Cut</span>
+              <span class="text-xs sm:text-sm font-black text-amber-700 dark:text-[#F5A623] mt-0.5 block truncate">+${formatCurrency(fin.totalLeaderCut)}</span>
             </div>
 
-            <div class="p-2.5 rounded-xl ${fin.workerBalance > 0 ? 'bg-emerald-950/60 border border-emerald-800/50' : 'bg-slate-800/60 border border-slate-700'}">
-              <span class="text-[10px] text-emerald-300 uppercase font-bold block">Offen an Arbeiter</span>
-              <span class="text-sm font-black ${fin.workerBalance > 0 ? 'text-emerald-400' : 'text-slate-300'} mt-0.5 block truncate">${formatCurrency(fin.workerBalance)}</span>
+            <div class="p-2 sm:p-2.5 rounded-xl ${fin.workerBalance > 0 ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-slate-50 dark:bg-[#1a222c] border border-slate-200/80 dark:border-[#283544]'}">
+              <span class="text-[9px] text-emerald-700 dark:text-emerald-400 uppercase font-bold block">Offen an Arbeiter</span>
+              <span class="text-xs sm:text-sm font-black ${fin.workerBalance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'} mt-0.5 block truncate">${formatCurrency(fin.workerBalance)}</span>
             </div>
           </div>
         ` : isSupervisor ? `
-          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-700/60 text-center">
-            <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">Gesamtsumme</span>
-              <span class="text-sm font-bold text-white mt-0.5 block truncate">${formatCurrency(fin.totalSupervisorCost)}</span>
+          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-[#1e2733] text-center">
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-[#1a222c]">
+              <span class="text-[9px] text-slate-400 uppercase font-semibold block">Gesamtsumme</span>
+              <span class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5 block truncate">${formatCurrency(fin.totalSupervisorCost)}</span>
             </div>
 
-            <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Bereits bezahlt')}</span>
-              <span class="text-sm font-bold text-blue-400 mt-0.5 block truncate">${formatCurrency(fin.totalPaid)}</span>
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-[#1a222c]">
+              <span class="text-[9px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Bezahlt')}</span>
+              <span class="text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 block truncate">${formatCurrency(fin.totalPaid)}</span>
             </div>
 
-            <div class="p-2 rounded-xl ${fin.supervisorBalance > 0 ? 'bg-emerald-950/60 border border-emerald-800/50' : 'bg-slate-800/50'}">
-              <span class="text-[10px] text-emerald-300 uppercase font-bold block">${t('balance_remaining', 'Noch offen')}</span>
-              <span class="text-base font-extrabold ${fin.supervisorBalance > 0 ? 'text-emerald-400' : 'text-slate-300'} mt-0.5 block truncate">${formatCurrency(fin.supervisorBalance)}</span>
+            <div class="p-2 rounded-xl ${fin.supervisorBalance > 0 ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-slate-50 dark:bg-[#1a222c]'}">
+              <span class="text-[9px] text-emerald-700 dark:text-emerald-400 uppercase font-bold block">${t('balance_remaining', 'Noch offen')}</span>
+              <span class="text-xs sm:text-sm font-extrabold ${fin.supervisorBalance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} mt-0.5 block truncate">${formatCurrency(fin.supervisorBalance)}</span>
             </div>
           </div>
         ` : `
-          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-700/60 text-center">
-            <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_earned', 'Dein Verdienst')}</span>
-              <span class="text-sm font-bold text-white mt-0.5 block truncate">${formatCurrency(fin.totalWorkerEarned)}</span>
+          <div class="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-[#1e2733] text-center">
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-[#1a222c]">
+              <span class="text-[9px] text-slate-400 uppercase font-semibold block">${t('total_earned', 'Dein Verdienst')}</span>
+              <span class="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5 block truncate">${formatCurrency(fin.totalWorkerEarned)}</span>
             </div>
 
-            <div class="p-2 rounded-xl bg-slate-800/50">
-              <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Erhalten')}</span>
-              <span class="text-sm font-bold text-blue-400 mt-0.5 block truncate">${formatCurrency(fin.totalPaid)}</span>
+            <div class="p-2 rounded-xl bg-slate-50 dark:bg-[#1a222c]">
+              <span class="text-[9px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Erhalten')}</span>
+              <span class="text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 block truncate">${formatCurrency(fin.totalPaid)}</span>
             </div>
 
-            <div class="p-2 rounded-xl ${fin.workerBalance > 0 ? 'bg-emerald-950/60 border border-emerald-800/50' : 'bg-slate-800/50'}">
-              <span class="text-[10px] text-emerald-300 uppercase font-bold block">${t('balance_remaining', 'Offener Lohn')}</span>
-              <span class="text-base font-extrabold ${fin.workerBalance > 0 ? 'text-emerald-400' : 'text-slate-300'} mt-0.5 block truncate">${formatCurrency(fin.workerBalance)}</span>
+            <div class="p-2 rounded-xl ${fin.workerBalance > 0 ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-slate-50 dark:bg-[#1a222c]'}">
+              <span class="text-[9px] text-emerald-700 dark:text-emerald-400 uppercase font-bold block">${t('balance_remaining', 'Offener Lohn')}</span>
+              <span class="text-xs sm:text-sm font-extrabold ${fin.workerBalance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} mt-0.5 block truncate">${formatCurrency(fin.workerBalance)}</span>
             </div>
           </div>
         `}
       </div>
 
-      <!-- Worker-by-Worker Payment & Balance Stats (Total, Paid, Remaining) -->
+      <!-- Worker-by-Worker Payment & Balance Stats -->
       ${(!isWorker || isLeader || isSupervisor) ? `
         <div class="space-y-2.5">
           <div class="flex items-center justify-between px-1">
-            <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Abrechnung pro Mitarbeiter</h3>
-            <span class="text-[11px] text-slate-400 font-semibold">${appData.workers.filter(w => w.role === 'worker').length} Mitarbeiter</span>
+            <h3 class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Abrechnung pro Mitarbeiter</h3>
+            <span class="text-[10px] text-slate-400 font-semibold">${appData.workers.filter(w => w.role === 'worker').length} Mitarbeiter</span>
           </div>
 
           <div class="space-y-2">
@@ -3306,60 +3358,60 @@ function renderPayments() {
               const remaining = Math.max(0, wFin.workerBalance);
               const isFullyPaid = wFin.workerEarned > 0 && remaining <= 0;
               return `
-                <div class="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-3.5 space-y-2.5 shadow-sm">
+                <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-3 sm:p-3.5 space-y-2.5 shadow-sm">
                   <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                      <div class="w-7 h-7 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-xs font-bold text-[#F5C000]">
+                      <div class="w-7 h-7 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xs font-bold text-[#F5A623]">
                         👷
                       </div>
                       <div>
-                        <div class="text-xs font-bold text-white">${w.name}</div>
+                        <div class="text-xs font-bold text-slate-900 dark:text-white">${w.name}</div>
                         <div class="text-[10px] text-slate-400">@${w.username} • ${formatCurrency(w.hourly_rate || w.rate)}/h</div>
                       </div>
                     </div>
 
                     <div>
                       ${isFullyPaid ? `
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/70 text-emerald-400 border border-emerald-800/60">
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                           🟢 Vollständig bezahlt
                         </span>
                       ` : remaining > 0 ? `
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/70 text-amber-300 border border-amber-800/60">
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
                           🟡 ${formatCurrency(remaining)} offen
                         </span>
                       ` : `
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-700/60">
-                          0,00 € (Keine Schichten)
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-100 dark:bg-[#1c2430] text-slate-500">
+                          0,00 €
                         </span>
                       `}
                     </div>
                   </div>
 
-                  <!-- 3 Stats Columns: Total Earned, Paid, To be paid -->
-                  <div class="grid grid-cols-3 gap-2 bg-slate-900/60 border border-slate-700/40 rounded-xl p-2.5 text-center text-xs">
+                  <!-- 3 Stats Columns -->
+                  <div class="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-[#0e1318] border border-slate-200/80 dark:border-[#1e2733] rounded-xl p-2 text-center text-xs">
                     <div>
-                      <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_earned', 'Total Lohn')}</span>
-                      <span class="font-extrabold text-white text-xs block mt-0.5">${formatCurrency(wFin.workerEarned)}</span>
-                      <span class="text-[9px] text-slate-500 block">${wFin.totalHours.toFixed(1)} Std.</span>
+                      <span class="text-[9px] text-slate-400 uppercase font-semibold block">${t('total_earned', 'Total Lohn')}</span>
+                      <span class="font-extrabold text-slate-900 dark:text-white text-xs block mt-0.5">${formatCurrency(wFin.workerEarned)}</span>
+                      <span class="text-[8px] text-slate-400 block">${wFin.totalHours.toFixed(1)} Std.</span>
                     </div>
 
                     <div>
-                      <span class="text-[10px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Bezahlt')}</span>
-                      <span class="font-extrabold text-blue-400 text-xs block mt-0.5">${formatCurrency(wFin.totalPaid)}</span>
-                      <span class="text-[9px] text-slate-500 block">${appData.payments.filter(p => (p.workerId === w.id || p.worker_id === w.id) && p.status === 'approved').length} Zahlungen</span>
+                      <span class="text-[9px] text-slate-400 uppercase font-semibold block">${t('total_paid', 'Bezahlt')}</span>
+                      <span class="font-extrabold text-blue-600 dark:text-blue-400 text-xs block mt-0.5">${formatCurrency(wFin.totalPaid)}</span>
+                      <span class="text-[8px] text-slate-400 block">${appData.payments.filter(p => (p.workerId === w.id || p.worker_id === w.id) && p.status === 'approved').length} Zahlungen</span>
                     </div>
 
                     <div>
-                      <span class="text-[10px] text-[#F5C000] uppercase font-bold block">${t('balance_remaining', 'Noch offen')}</span>
-                      <span class="font-black text-xs block mt-0.5 ${remaining > 0 ? 'text-emerald-400' : 'text-slate-400'}">${formatCurrency(remaining)}</span>
-                      <span class="text-[9px] text-slate-500 block">Restbetrag</span>
+                      <span class="text-[9px] text-amber-700 dark:text-[#F5A623] uppercase font-bold block">${t('balance_remaining', 'Noch offen')}</span>
+                      <span class="font-black text-xs block mt-0.5 ${remaining > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}">${formatCurrency(remaining)}</span>
+                      <span class="text-[8px] text-slate-400 block">Restbetrag</span>
                     </div>
                   </div>
 
                   ${isLeader ? `
-                    <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-700/40">
+                    <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-100 dark:border-[#1e2733]">
                       <button onclick="openModal('logPayment', '${w.id}')"
-                        class="bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-xl text-[11px] active-press transition flex items-center gap-1 shadow-sm">
+                        class="bg-[#F5A623] hover:bg-[#E09618] text-black font-bold px-2.5 py-1.5 rounded-xl text-[10px] active-press transition flex items-center gap-1 shadow-sm">
                         <span>💵</span> <span>${t('log_payment', 'Auszahlung erfassen')}</span>
                       </button>
                     </div>
@@ -3371,23 +3423,23 @@ function renderPayments() {
         </div>
       ` : ''}
 
-      <!-- Distinct Payment & Payout History Section (Requirement 4: Distinct Receipt/Ledger Styling) -->
-      <div class="space-y-3 pt-2">
+      <!-- Distinct Payment & Payout History Section -->
+      <div class="space-y-2.5 pt-1">
         <div class="flex items-center justify-between px-1">
           <div class="flex items-center gap-2">
-            <span class="text-lg">📜</span>
+            <span class="text-base">📜</span>
             <div>
-              <h3 class="text-sm font-black text-white uppercase tracking-wider">${t('history_title', 'Auszahlungsverlauf & Belege')}</h3>
-              <p class="text-[11px] text-slate-400">${t('history_subtitle', 'Chronologisches Zahlungsjournal & Quittungsarchiv')}</p>
+              <h3 class="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">${t('history_title', 'Auszahlungsverlauf & Belege')}</h3>
+              <p class="text-[10px] text-slate-400">${t('history_subtitle', 'Chronologisches Zahlungsjournal & Quittungsarchiv')}</p>
             </div>
           </div>
-          <span class="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-blue-950/70 border border-blue-800/50 text-blue-300 font-bold">
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-300 font-bold">
             ${filteredPayments.length} Belege
           </span>
         </div>
 
         ${filteredPayments.length === 0 ? `
-          <div class="bg-gradient-to-br from-[#0c131d] to-[#121c2b] border border-blue-900/40 rounded-2xl p-8 text-center text-slate-400 text-sm">
+          <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#212a35] rounded-3xl p-6 text-center text-slate-400 text-xs shadow-sm">
             ${t('no_payments_yet', 'Noch keine Auszahlungen erfasst.')}
           </div>
         ` : filteredPayments.map(p => {
@@ -3397,67 +3449,67 @@ function renderPayments() {
           const isRejected = p.status === 'rejected';
 
           return `
-            <div class="bg-gradient-to-br from-[#0c131d] via-[#101926] to-[#141f30] border-2 border-slate-700/70 ${isApproved ? 'border-l-4 border-l-emerald-500' : isRejected ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-[#F5C000]'} rounded-2xl p-4 shadow-xl space-y-2.5 relative overflow-hidden transition hover:border-slate-600">
+            <div class="bg-white dark:bg-[#121922] border border-slate-200/90 dark:border-[#222e3c] ${isApproved ? 'border-l-4 border-l-emerald-500' : isRejected ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-[#F5A623]'} rounded-2xl p-3.5 shadow-sm space-y-2 relative overflow-hidden transition">
               <!-- Top Row: Receipt Code + Date + Status -->
-              <div class="flex items-center justify-between pb-2 border-b border-slate-700/60 text-xs">
+              <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-[#1d2733] text-xs">
                 <div class="flex items-center gap-2">
-                  <span class="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-700 text-[#F5C000] font-mono text-[11px] font-bold">
+                  <span class="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-[#1a232e] text-slate-700 dark:text-slate-300 font-mono text-[10px] font-bold">
                     🧾 AB-PAY-${(p.id || '').replace('p_', '').toUpperCase().slice(0, 8)}
                   </span>
-                  <span class="text-slate-400 font-medium">📅 ${formatDate(p.date)}</span>
+                  <span class="text-slate-400 text-[10px] font-medium">📅 ${formatDate(p.date)}</span>
                 </div>
                 <div>
-                  ${isApproved ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-400 border border-emerald-800/60">🟢 Genehmigt</span>`
-                  : isRejected ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800/60">🔴 Abgelehnt</span>`
-                  : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/60">🟡 Ausstehend</span>`}
+                  ${isApproved ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">🟢 Genehmigt</span>`
+                  : isRejected ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">🔴 Abgelehnt</span>`
+                  : `<span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">🟡 Ausstehend</span>`}
                 </div>
               </div>
 
               <!-- Main Amount & Recipient Box -->
-              <div class="flex items-center justify-between py-1">
+              <div class="flex items-center justify-between py-0.5">
                 <div>
-                  <span class="text-[10px] text-slate-400 uppercase font-semibold block">Auszahlungsbetrag</span>
-                  <span class="text-xl font-black text-[#F5C000] font-mono tracking-tight block">${formatCurrency(p.amount)}</span>
+                  <span class="text-[9px] text-slate-400 uppercase font-semibold block">Auszahlungsbetrag</span>
+                  <span class="text-lg font-black text-amber-700 dark:text-[#F5A623] font-mono tracking-tight block">${formatCurrency(p.amount)}</span>
                 </div>
                 <div class="text-right">
-                  <span class="text-[10px] text-slate-400 uppercase font-semibold block">Empfänger</span>
-                  <span class="text-xs font-bold text-white block">${p.receivedBy || worker?.name || 'Mitarbeiter'}</span>
-                  <span class="text-[10px] text-slate-500 font-mono block">@${worker?.username || '-'}</span>
+                  <span class="text-[9px] text-slate-400 uppercase font-semibold block">Empfänger</span>
+                  <span class="text-xs font-bold text-slate-900 dark:text-white block">${p.receivedBy || worker?.name || 'Mitarbeiter'}</span>
+                  <span class="text-[9px] text-slate-400 font-mono block">@${worker?.username || '-'}</span>
                 </div>
               </div>
 
               <!-- Transaction Metadata Details Box -->
-              <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800/80 text-[11px] space-y-1 text-slate-300">
+              <div class="p-2 rounded-xl bg-slate-50 dark:bg-[#0e1318] border border-slate-200/80 dark:border-[#1e2733] text-[10px] space-y-0.5 text-slate-600 dark:text-slate-300">
                 <div class="flex items-center justify-between text-slate-400">
                   <span>✍️ ${t('logged_by', 'Erfasst durch')}:</span>
-                  <span class="text-slate-200 font-semibold">${p.loggedBy || 'LEADER'}</span>
+                  <span class="text-slate-700 dark:text-slate-200 font-semibold">${p.loggedBy || 'LEADER'}</span>
                 </div>
                 ${p.comment ? `
                   <div class="flex items-center justify-between text-slate-400">
                     <span>💬 Notiz / Zweck:</span>
-                    <span class="text-slate-200 italic font-medium truncate max-w-[200px]" title="${p.comment}">"${p.comment}"</span>
+                    <span class="text-slate-700 dark:text-slate-200 italic font-medium truncate max-w-[200px]" title="${p.comment}">"${p.comment}"</span>
                   </div>
                 ` : ''}
               </div>
 
-              <!-- Perforated / Dashed Receipt Divider -->
-              <div class="border-t border-dashed border-slate-700/80 pt-2 flex flex-wrap items-center justify-between gap-2">
+              <!-- Action Divider -->
+              <div class="border-t border-dashed border-slate-200 dark:border-slate-800 pt-2 flex flex-wrap items-center justify-between gap-2">
                 <button onclick="openModal('paymentInvoice', '${p.id}')" 
-                  class="bg-slate-900 hover:bg-slate-850 border border-slate-700 text-[#F5C000] px-3 py-1.5 rounded-xl text-xs font-bold active-press transition flex items-center gap-1.5 shadow-sm">
+                  class="bg-slate-100 dark:bg-[#1a232e] hover:bg-slate-200 dark:hover:bg-[#222e3c] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 px-2.5 py-1.5 rounded-xl text-[10px] font-bold active-press transition flex items-center gap-1 shadow-sm">
                   <span>📄</span> <span>${t('payment_details_invoice', 'Beleg / Quittung')}</span>
                 </button>
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5">
                   <button onclick="downloadPaymentInvoicePdf('${p.id}')" title="Als PDF herunterladen" 
-                    class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-xl text-xs font-semibold active-press transition flex items-center gap-1">
+                    class="bg-slate-100 dark:bg-[#1a232e] hover:bg-slate-200 dark:hover:bg-[#222e3c] text-slate-700 dark:text-slate-300 px-2 py-1.5 rounded-xl text-[10px] font-semibold active-press transition flex items-center gap-1">
                     <span>📥</span> <span>PDF</span>
                   </button>
 
                   ${(isSupervisor || isLeader) && p.status === 'pending' ? `
-                    <button onclick="handleApprovePayment('${p.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold active-press transition">
+                    <button onclick="handleApprovePayment('${p.id}')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold active-press transition">
                       ${t('approve', 'Genehmigen')}
                     </button>
-                    <button onclick="handleRejectPayment('${p.id}')" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold active-press transition">
+                    <button onclick="handleRejectPayment('${p.id}')" class="bg-red-600 hover:bg-red-500 text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold active-press transition">
                       ${t('reject', 'Ablehnen')}
                     </button>
                   ` : ''}
@@ -3479,15 +3531,15 @@ function renderBottomNav() {
   ];
 
   return `
-    <nav class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto glass-nav border-t border-slate-800 z-40 safe-area-nav">
-      <div class="grid grid-cols-3 gap-1 px-3 py-2">
+    <nav class="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto glass-nav border-t border-slate-200/90 dark:border-[#1e2733] z-40 safe-area-nav transition-colors">
+      <div class="grid grid-cols-3 gap-1 px-3 py-1.5">
         ${tabs.map(t => {
           const isActive = appState.activeTab === t.id;
           return `
             <button onclick="switchTab('${t.id}')" 
-              class="flex flex-col items-center justify-center py-1.5 rounded-2xl transition active-press ${isActive ? 'text-blue-400 font-bold bg-blue-950/40 border border-blue-800/40' : 'text-slate-400 hover:text-slate-200'}">
-              <svg class="w-6 h-6 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">${t.icon}</svg>
-              <span class="text-[11px]">${t.label}</span>
+              class="flex flex-col items-center justify-center py-1.5 rounded-2xl transition active-press ${isActive ? 'text-amber-700 dark:text-[#F5A623] font-extrabold bg-amber-500/10 border border-amber-500/20' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}">
+              <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">${t.icon}</svg>
+              <span class="text-[10px]">${t.label}</span>
             </button>
           `;
         }).join('')}
@@ -3508,43 +3560,143 @@ function renderModals() {
 
   let modalContent = '';
 
-  // 1. User Profile & Password Change / Logout
-  if (modal === 'userProfile') {
+  // 1. Settings & User Profile Modal (Language, Theme, Account, Cloud Sync)
+  if (modal === 'settingsModal' || modal === 'userProfile') {
+    const isDark = currentTheme === 'dark';
+    const isDe = currentLang === 'de';
+
+    let roleLabel = 'Mitarbeiter';
+    let roleBg = 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+    if (user?.role === 'leader') {
+      roleLabel = 'Leiter (Admin)';
+      roleBg = 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
+    } else if (user?.role === 'supervisor') {
+      roleLabel = 'Vorarbeiter / Supervisor';
+      roleBg = 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/30';
+    }
+
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">Benutzerprofil</h3>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[90vh] overflow-y-auto my-auto shadow-2xl text-slate-800 dark:text-slate-100">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-amber-500/10 text-[#F5A623] flex items-center justify-center text-sm font-bold">⚙️</span>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">${t('settings_title', 'Einstellungen')}</h3>
+          </div>
+          <button onclick="closeModal()" class="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition">✕</button>
         </div>
 
-        <div class="space-y-2 bg-slate-800/60 p-4 rounded-2xl border border-slate-700">
-          <div class="text-sm font-bold text-white">${user?.name}</div>
-          <div class="text-xs text-slate-400">Rolle: <span class="text-[#F5C000] font-semibold uppercase">${user?.role}</span></div>
-          <div class="text-xs text-slate-400">Benutzername: <span class="text-slate-200 font-mono">${user?.username}</span></div>
-          <div class="text-xs text-slate-400">Firma: <span class="text-slate-200">${user?.company_name || 'AllesBau'}</span></div>
+        <!-- Section 1: Appearance / Theme -->
+        <div class="space-y-1.5">
+          <label class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider block">${t('theme_label', 'Erscheinungsbild / Design')}</label>
+          <div class="grid grid-cols-2 p-1 bg-slate-100 dark:bg-[#0e1318] rounded-xl border border-slate-200/80 dark:border-[#212a35]">
+            <button onclick="setTheme('light')" 
+              class="py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${!isDark ? 'bg-white text-slate-900 shadow-sm font-bold border border-slate-200/60' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}">
+              <span>☀️</span>
+              <span>${t('theme_light', 'Hell')}</span>
+            </button>
+            <button onclick="setTheme('dark')" 
+              class="py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${isDark ? 'bg-[#1e2631] text-amber-400 shadow-sm font-bold border border-[#2d3a4b]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}">
+              <span>🌙</span>
+              <span>${t('theme_dark', 'Dunkel')}</span>
+            </button>
+          </div>
         </div>
 
-        <div class="space-y-2">
-          <button onclick="downloadMonthlyReportPdf('${user?.id}', appState.selectedMonth); closeModal();"
-            class="w-full text-left bg-gradient-to-r from-[#F5C000] to-[#e6b400] text-black p-3 rounded-2xl text-xs font-bold transition flex items-center justify-between shadow-md active-press">
-            <span>📄 Monatsbericht herunterladen (PDF)</span>
-            <span>⬇</span>
-          </button>
-
-          <button onclick="openModal('changePassword')" 
-            class="w-full text-left bg-slate-800 hover:bg-slate-700 text-slate-200 p-3 rounded-2xl text-xs font-semibold transition border border-slate-700">
-            🔑 Passwort ändern
-          </button>
-
-          <button onclick="handleClearAllData()" 
-            class="w-full text-left bg-red-950/40 hover:bg-red-900/60 text-red-300 p-3 rounded-2xl text-xs font-semibold transition border border-red-800/40">
-            🗑️ Alle Daten löschen (Reset)
-          </button>
+        <!-- Section 2: Language -->
+        <div class="space-y-1.5">
+          <label class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider block">${t('language_label', 'Sprache / Language')}</label>
+          <div class="grid grid-cols-2 p-1 bg-slate-100 dark:bg-[#0e1318] rounded-xl border border-slate-200/80 dark:border-[#212a35]">
+            <button onclick="currentLang='de'; localStorage.setItem('allesbau_lang','de'); renderApp();" 
+              class="py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${isDe ? 'bg-white dark:bg-[#1e2631] text-slate-900 dark:text-white shadow-sm font-bold border border-slate-200/60 dark:border-[#2d3a4b]' : 'text-slate-500 dark:text-slate-400'}">
+              <span>🇩🇪</span>
+              <span>Deutsch</span>
+            </button>
+            <button onclick="currentLang='en'; localStorage.setItem('allesbau_lang','en'); renderApp();" 
+              class="py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition ${!isDe ? 'bg-white dark:bg-[#1e2631] text-slate-900 dark:text-white shadow-sm font-bold border border-slate-200/60 dark:border-[#2d3a4b]' : 'text-slate-500 dark:text-slate-400'}">
+              <span>🇬🇧</span>
+              <span>English</span>
+            </button>
+          </div>
         </div>
 
-        <div class="pt-2 border-t border-slate-800 flex justify-between items-center">
-          <button onclick="logout()" class="text-xs text-red-400 font-bold hover:text-red-300">Abmelden</button>
-          <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Fertig</button>
+        <!-- Section 3: Account Info & Actions -->
+        <div class="space-y-2 pt-1">
+          <label class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider block">${t('account_label', 'Benutzerkonto')}</label>
+          <div class="p-3 bg-slate-50 dark:bg-[#0f141a] rounded-2xl border border-slate-200/80 dark:border-[#212a35] space-y-1.5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-xs font-bold text-slate-900 dark:text-white">${user?.name}</div>
+                <div class="text-[10px] font-mono text-slate-500 dark:text-slate-400">@${user?.username}</div>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[9px] font-bold border ${roleBg}">
+                ${roleLabel}
+              </span>
+            </div>
+            <div class="pt-1.5 border-t border-slate-200/60 dark:border-[#1d2530] text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5">
+              <div>Firma: <span class="font-medium text-slate-800 dark:text-slate-200">${user?.company_name || 'AllesBau'}</span></div>
+              ${user?.hourly_rate ? `<div>Stundenlohn: <span class="font-mono font-medium text-slate-800 dark:text-slate-200">${formatCurrency(user.hourly_rate)}/Std.</span></div>` : ''}
+              ${user?.billing_rate && (user?.role === 'leader' || user?.role === 'supervisor') ? `<div>Abrechnungssatz: <span class="font-mono font-medium text-slate-800 dark:text-slate-200">${formatCurrency(user.billing_rate)}/Std.</span></div>` : ''}
+            </div>
+          </div>
+
+          <div class="space-y-1.5">
+            <button onclick="downloadMonthlyReportPdf('${user?.id}', appState.selectedMonth); closeModal();"
+              class="w-full text-left bg-gradient-to-r from-[#F5A623] to-[#E09618] hover:from-[#ffd333] hover:to-[#F5A623] text-black px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-between shadow-sm active-press">
+              <span class="flex items-center gap-1.5">
+                <span>📄</span>
+                <span>${t('download_report_pdf', 'Persönlicher Monatsbericht (PDF)')}</span>
+              </span>
+              <span>⬇</span>
+            </button>
+
+            <button onclick="openModal('changePassword')" 
+              class="w-full text-left bg-slate-100 dark:bg-[#18202a] hover:bg-slate-200 dark:hover:bg-[#202b38] text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl text-xs font-semibold transition border border-slate-200 dark:border-[#253241] flex items-center gap-1.5 active-press">
+              <span>🔑</span>
+              <span>Passwort ändern</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 4: System & Cloud -->
+        <div class="space-y-2 pt-1 border-t border-slate-100 dark:border-[#212a35]">
+          <label class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider block">${t('system_label', 'System & Cloud-Synchronisation')}</label>
+          <div class="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-[#0f141a] rounded-xl border border-slate-200/80 dark:border-[#212a35] text-xs">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full ${getApiBaseUrl() ? 'bg-emerald-500' : 'bg-[#F5A623]'}"></span>
+              <span class="text-slate-700 dark:text-slate-300 font-medium text-[11px]">${getApiBaseUrl() ? 'Cloud Backend' : 'Lokale Browser-DB'}</span>
+            </div>
+            <button onclick="syncDataWithServer(); showToast('Daten synchronisiert! 🔄', 'info');" 
+              class="text-[10px] font-bold text-amber-700 dark:text-[#F5A623] hover:underline flex items-center gap-1">
+              <span>🔄</span>
+              <span>Sync</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <button onclick="openModal('serverConfig')" 
+              class="text-left bg-slate-100 dark:bg-[#18202a] hover:bg-slate-200 dark:hover:bg-[#202b38] text-slate-600 dark:text-slate-300 p-2 rounded-xl text-[10px] font-semibold transition border border-slate-200 dark:border-[#253241] flex items-center gap-1 active-press">
+              <span>🌐</span>
+              <span class="truncate">Server URL</span>
+            </button>
+            <button onclick="handleClearAllData()" 
+              class="text-left bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-700 dark:text-red-300 p-2 rounded-xl text-[10px] font-semibold transition border border-red-200 dark:border-red-900/40 flex items-center gap-1 active-press">
+              <span>🗑️</span>
+              <span class="truncate">Reset DB</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="pt-2.5 border-t border-slate-100 dark:border-[#212a35] flex items-center justify-between">
+          <button onclick="logout()" class="text-xs font-bold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 flex items-center gap-1">
+            <span>🚪</span>
+            <span>Abmelden</span>
+          </button>
+          <button onclick="closeModal()" class="bg-slate-100 dark:bg-[#1c2430] hover:bg-slate-200 dark:hover:bg-[#253140] text-slate-800 dark:text-slate-200 px-3.5 py-1.5 rounded-xl text-xs font-bold transition active-press">
+            ${t('done', 'Fertig')}
+          </button>
         </div>
       </div>
     `;
@@ -3554,34 +3706,34 @@ function renderModals() {
   else if (modal === 'selectWorkerForReport') {
     const workers = appData.workers.filter(w => w.role === 'worker');
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 w-full max-w-sm animate-slide-up space-y-3.5 shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
           <div>
-            <h3 class="text-base font-bold text-white">📄 Monatsbericht wählen</h3>
-            <p class="text-[11px] text-[#888]">${formatMonthYear(appState.selectedMonth)} (1-Seite PDF)</p>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">📄 Monatsbericht wählen</h3>
+            <p class="text-[10px] text-slate-400">${formatMonthYear(appState.selectedMonth)} (1-Seite PDF)</p>
           </div>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
-        <p class="text-xs text-slate-300">
-          Wähle einen Mitarbeiter aus, um den offiziellen Monatsbericht für <b>${formatMonthYear(appState.selectedMonth)}</b> als 1-seitiges PDF herunterzuladen:
+        <p class="text-xs text-slate-600 dark:text-slate-300">
+          Wähle einen Mitarbeiter aus, um den Monatsbericht für <b>${formatMonthYear(appState.selectedMonth)}</b> als PDF herunterzuladen:
         </p>
 
-        <div class="space-y-2 max-h-64 overflow-y-auto pr-1">
+        <div class="space-y-1.5 max-h-60 overflow-y-auto pr-1">
           ${workers.length === 0 ? `
-            <div class="text-center text-slate-500 py-4 text-xs">Keine Arbeiter registriert.</div>
+            <div class="text-center text-slate-400 py-3 text-xs">Keine Arbeiter registriert.</div>
           ` : workers.map(w => {
             const mShifts = appData.shifts.filter(s => (s.workerId === w.id || s.worker_id === w.id) && s.date && s.date.startsWith(appState.selectedMonth) && s.status !== 'rejected');
             const totalHours = mShifts.reduce((sum, s) => sum + (s.totalHours || s.total_hours || 0), 0);
             const approvedHours = mShifts.filter(s => s.status === 'approved').reduce((sum, s) => sum + (s.totalHours || s.total_hours || 0), 0);
             return `
-              <div class="bg-slate-800/70 border border-slate-700/70 rounded-2xl p-3 flex items-center justify-between">
+              <div class="bg-slate-50 dark:bg-[#1a222c] border border-slate-200/80 dark:border-[#283544] rounded-2xl p-2.5 flex items-center justify-between">
                 <div>
-                  <div class="text-xs font-bold text-white">${w.name}</div>
-                  <div class="text-[10px] text-emerald-400 font-medium">${totalHours.toFixed(1)} Std. gesamt (${approvedHours.toFixed(1)} genehmigt)</div>
+                  <div class="text-xs font-bold text-slate-900 dark:text-white">${w.name}</div>
+                  <div class="text-[9px] text-emerald-600 dark:text-emerald-400 font-medium">${totalHours.toFixed(1)} Std. (${approvedHours.toFixed(1)} genehmigt)</div>
                 </div>
                 <button onclick="downloadMonthlyReportPdf('${w.id}', appState.selectedMonth); closeModal();"
-                  class="bg-[#F5C000] hover:bg-[#ffd333] text-black font-extrabold px-3 py-1.5 rounded-xl text-xs active-press transition flex items-center gap-1 shadow-sm">
+                  class="bg-[#F5A623] hover:bg-[#E09618] text-black font-extrabold px-2.5 py-1 rounded-xl text-xs active-press transition flex items-center gap-1 shadow-sm">
                   <span>📥</span>
                   <span>PDF</span>
                 </button>
@@ -3592,13 +3744,13 @@ function renderModals() {
 
         ${workers.length > 1 ? `
           <button onclick="appData.workers.filter(w => w.role === 'worker').forEach(w => downloadMonthlyReportPdf(w.id, appState.selectedMonth)); closeModal();"
-            class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-2 rounded-xl text-xs font-bold border border-slate-700 active-press transition">
+            class="w-full bg-slate-100 dark:bg-[#1c2430] hover:bg-slate-200 dark:hover:bg-[#253140] text-slate-800 dark:text-slate-200 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 active-press transition">
             📥 Alle Berichte herunterladen (${workers.length})
           </button>
         ` : ''}
 
-        <div class="pt-2 border-t border-slate-800 flex justify-end">
-          <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Schließen</button>
+        <div class="pt-2 border-t border-slate-100 dark:border-[#212a35] flex justify-end">
+          <button onclick="closeModal()" class="bg-slate-100 dark:bg-[#1c2430] text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Schließen</button>
         </div>
       </div>
     `;
@@ -3607,102 +3759,99 @@ function renderModals() {
   // 2. Change Password Modal
   else if (modal === 'changePassword') {
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">${t('change_password', 'Passwort ändern')}</h3>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">${t('change_password', 'Passwort ändern')}</h3>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
         <form onsubmit="handleChangePassword(event)" class="space-y-3">
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">${t('current_password', 'Aktuelles Passwort')}</label>
-            <input type="password" name="current_password" required placeholder="Aktuelles Passwort eingeben"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">${t('current_password', 'Aktuelles Passwort')}</label>
+            <input type="password" name="current_password" required placeholder="Aktuelles Passwort"
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">${t('new_password', 'Neues Passwort')}</label>
-            <input type="password" name="new_password" required placeholder="Neues Passwort eingeben"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">${t('new_password', 'Neues Passwort')}</label>
+            <input type="password" name="new_password" required placeholder="Neues Passwort"
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
-          <div class="pt-3 flex justify-end gap-2">
-            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-            <button type="submit" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2 rounded-xl text-xs font-bold active-press shadow-md">${t('update_password', 'Passwort aktualisieren')}</button>
+          <div class="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-[#212a35]">
+            <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+            <button type="submit" class="bg-[#F5A623] hover:bg-[#E09618] text-black px-4 py-1.5 rounded-xl text-xs font-bold active-press shadow-sm">${t('update_password', 'Passwort speichern')}</button>
           </div>
         </form>
       </div>
     `;
   }
 
-  // 3. Add Supervisor or Worker (Leader action)
+  // 3. Add User Modal
   else if (modal === 'addUser') {
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">Mitarbeiter registrieren</h3>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 max-h-[88vh] overflow-y-auto my-auto shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Mitarbeiter registrieren</h3>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
-        <form onsubmit="handleAddUser(event)" class="space-y-3">
+        <form onsubmit="handleAddUser(event)" class="space-y-2.5">
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Rolle</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Rolle</label>
             <select name="userRole" onchange="const wBox=document.getElementById('workerFields'); if(this.value==='worker'){wBox.classList.remove('hidden')}else{wBox.classList.add('hidden')}"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
               <option value="worker" selected>👷 Arbeiter (Arbeitskraft)</option>
               <option value="supervisor">🛡️ Supervisor (Freigeber / Zahler)</option>
             </select>
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Vollständiger Name</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Vollständiger Name</label>
             <input type="text" name="name" required placeholder="z.B. Ali Hasan"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Benutzername</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Benutzername</label>
             <input type="text" name="username" required placeholder="z.B. ali_h"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Initiales Passwort</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Initiales Passwort</label>
             <input type="password" name="password" required placeholder="Passwort festlegen"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
-          <div id="workerFields" class="space-y-3">
+          <div id="workerFields" class="space-y-2.5">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-0.5">Stundensatz Chef / Supervisor (€/Std.)</label>
-              <span class="text-[10px] text-slate-400 block mb-1">Was der Chef/Kunde zahlt (nur für Chef & Leader sichtbar)</span>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">Stundensatz Chef / Kunde (€/Std.)</label>
               <input type="number" step="0.5" name="billing_rate" id="addUserBillingRate" value="30.00" oninput="updateAddUserCutPreview()"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-0.5">Auszahlungslohn an Arbeiter (€/Std.)</label>
-              <span class="text-[10px] text-slate-400 block mb-1">Was du dem Arbeiter auszahlst (Arbeiter sieht nur dies)</span>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">Auszahlungslohn an Arbeiter (€/Std.)</label>
               <input type="number" step="0.5" name="hourly_rate" id="addUserHourlyRate" value="20.00" oninput="updateAddUserCutPreview()"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
-            <!-- Dynamic Leader Cut Preview -->
-            <div id="addUserCutPreview" class="p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/60 flex items-center justify-between text-xs">
-              <span class="text-slate-300 font-semibold">💰 Dein Leader-Anteil (Cut):</span>
-              <span class="font-extrabold text-[#F5C000] text-sm">+10,00 € / Std.</span>
+            <div id="addUserCutPreview" class="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs">
+              <span class="text-amber-800 dark:text-amber-300 font-semibold text-[11px]">💰 Dein Anteil (Cut):</span>
+              <span class="font-extrabold text-amber-700 dark:text-[#F5A623] text-xs">+10,00 € / Std.</span>
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Telefonnummer (Optional)</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Telefonnummer (Optional)</label>
               <input type="text" name="phone" placeholder="+49 170 0000000"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
           </div>
 
-          <div class="pt-3 flex justify-end gap-2 border-t border-slate-800">
-            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-            <button type="submit" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2 rounded-xl text-xs font-bold active-press shadow-md">Registrieren</button>
+          <div class="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-[#212a35]">
+            <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+            <button type="submit" class="bg-[#F5A623] hover:bg-[#E09618] text-black px-4 py-1.5 rounded-xl text-xs font-bold active-press shadow-sm">Registrieren</button>
           </div>
         </form>
       </div>
@@ -3719,56 +3868,51 @@ function renderModals() {
     const currentCut = currentBillingRate - currentWorkerRate;
 
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 max-h-[88vh] overflow-y-auto my-auto shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
           <div>
-            <h3 class="text-base font-bold text-white">Raten & Lohn anpassen</h3>
-            <p class="text-xs text-[#F5C000] font-semibold">${worker.name} (@${worker.username})</p>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Raten & Lohn anpassen</h3>
+            <p class="text-[11px] text-[#F5A623] font-semibold">${worker.name} (@${worker.username})</p>
           </div>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
-        <form onsubmit="handleUpdateWorkerRates(event, '${worker.id}')" class="space-y-3.5">
+        <form onsubmit="handleUpdateWorkerRates(event, '${worker.id}')" class="space-y-3">
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Name des Mitarbeiters</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Name des Mitarbeiters</label>
             <input type="text" name="name" value="${worker.name}" required
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-0.5">Abrechnungssatz Chef / Supervisor (€/Std.)</label>
-            <span class="text-[10px] text-slate-400 block mb-1">Was der Chef/Supervisor zahlt (nur für Chef & Leader sichtbar)</span>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">Abrechnungssatz Chef / Kunde (€/Std.)</label>
             <input type="number" step="0.5" name="billing_rate" id="editBillingRate" value="${currentBillingRate.toFixed(2)}" oninput="updateEditCutPreview()" required
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-0.5">Auszahlungslohn an Arbeiter (€/Std.)</label>
-            <span class="text-[10px] text-slate-400 block mb-1">Was der Arbeiter erhält (Arbeiter sieht nur dies)</span>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-0.5">Auszahlungslohn an Arbeiter (€/Std.)</label>
             <input type="number" step="0.5" name="hourly_rate" id="editHourlyRate" value="${currentWorkerRate.toFixed(2)}" oninput="updateEditCutPreview()" required
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <!-- Dynamic Cut Readout -->
-          <div id="editCutPreview" class="p-3 rounded-xl bg-gradient-to-r from-amber-950/60 to-[#141414] border border-amber-800/60 flex items-center justify-between text-xs">
-            <div>
-              <span class="text-slate-300 font-bold block">💰 Dein Leader-Gewinn (Cut):</span>
-              <span class="text-[10px] text-slate-400">Differenz pro geleistete Arbeitsstunde</span>
-            </div>
-            <span id="editCutValue" class="font-black text-sm ${currentCut >= 0 ? 'text-[#F5C000]' : 'text-red-400'}">
+          <div id="editCutPreview" class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs">
+            <span class="text-amber-800 dark:text-amber-300 font-bold text-[11px]">💰 Dein Leader-Anteil (Cut):</span>
+            <span id="editCutValue" class="font-black text-xs ${currentCut >= 0 ? 'text-amber-700 dark:text-[#F5A623]' : 'text-red-500'}">
               ${currentCut >= 0 ? '+' : ''}${formatCurrency(currentCut)}/h
             </span>
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Telefonnummer (Optional)</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Telefonnummer (Optional)</label>
             <input type="text" name="phone" value="${worker.phone || ''}" placeholder="+49 ..."
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none">
           </div>
 
-          <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
-            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-            <button type="submit" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2 rounded-xl text-xs font-bold shadow-md active-press">Raten speichern</button>
+          <div class="pt-2 border-t border-slate-100 dark:border-[#212a35] flex justify-end gap-2">
+            <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+            <button type="submit" class="bg-[#F5A623] hover:bg-[#E09618] text-black px-4 py-1.5 rounded-xl text-xs font-bold shadow-sm active-press">Raten speichern</button>
           </div>
         </form>
       </div>
@@ -3780,133 +3924,133 @@ function renderModals() {
     const crewWorkers = appData.workers.filter(w => w.role === 'worker');
     if (crewWorkers.length === 0) {
       modalContent = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4 text-center">
-          <div class="text-3xl">👷</div>
-          <h3 class="text-base font-bold text-white">Keine Mitarbeiter vorhanden</h3>
-          <p class="text-xs text-slate-400">Bitte zuerst mindestens einen Mitarbeiter anlegen.</p>
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-3 text-center text-slate-800 dark:text-slate-100">
+          <div class="text-2xl">👷</div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Keine Mitarbeiter vorhanden</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Bitte zuerst mindestens einen Mitarbeiter anlegen.</p>
           <div class="pt-2 flex justify-center gap-2">
-            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-            <button type="button" onclick="openModal('addUser')" class="bg-[#F5C000] text-black px-4 py-2 rounded-xl text-xs font-bold">+ Mitarbeiter anlegen</button>
+            <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+            <button type="button" onclick="openModal('addUser')" class="bg-[#F5A623] text-black px-4 py-1.5 rounded-xl text-xs font-bold">+ Mitarbeiter anlegen</button>
           </div>
         </div>
       `;
     } else {
       modalContent = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 max-h-[88vh] overflow-y-auto my-auto shadow-2xl text-slate-800 dark:text-slate-100">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
             <div>
-              <h3 class="text-base font-bold text-white">Manuelle Schichterfassung</h3>
-              <p class="text-[11px] text-slate-400">Stunden für mehrere Mitarbeiter gleichzeitig eintragen</p>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">Manuelle Schichterfassung</h3>
+              <p class="text-[10px] text-slate-400">Stunden für Mitarbeiter eintragen</p>
             </div>
-            <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
           </div>
 
-          <form onsubmit="handleSaveManualShift(event)" class="space-y-3.5">
+          <form onsubmit="handleSaveManualShift(event)" class="space-y-3">
             <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label class="text-xs font-semibold text-slate-300">Mitarbeiter auswählen</label>
-                <div class="flex items-center gap-2 text-[11px]">
-                  <button type="button" onclick="toggleAllManualShiftWorkers(true)" class="text-[#F5C000] hover:underline font-bold">Alle wählen</button>
-                  <span class="text-slate-600">|</span>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Mitarbeiter auswählen</label>
+                <div class="flex items-center gap-2 text-[10px]">
+                  <button type="button" onclick="toggleAllManualShiftWorkers(true)" class="text-amber-700 dark:text-[#F5A623] hover:underline font-bold">Alle wählen</button>
+                  <span class="text-slate-300 dark:text-slate-600">|</span>
                   <button type="button" onclick="toggleAllManualShiftWorkers(false)" class="text-slate-400 hover:underline">Keine</button>
                 </div>
               </div>
 
-              <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-2 max-h-40 overflow-y-auto space-y-1.5">
+              <div class="bg-slate-50 dark:bg-[#0e1318] border border-slate-200/80 dark:border-[#1e2733] rounded-2xl p-1.5 max-h-36 overflow-y-auto space-y-1">
                 ${crewWorkers.map((w, idx) => `
-                  <label class="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-700/50 cursor-pointer transition select-none">
-                    <div class="flex items-center gap-2.5">
+                  <label class="flex items-center justify-between p-1.5 rounded-xl bg-white dark:bg-[#161f28] hover:bg-slate-100/60 dark:hover:bg-[#1d2733] border border-slate-200/60 dark:border-[#253241] cursor-pointer transition select-none">
+                    <div class="flex items-center gap-2">
                       <input type="checkbox" name="workerId" value="${w.id}" ${idx === 0 ? 'checked' : ''} onchange="updateManualWorkersSelectedCount()"
-                        class="w-4 h-4 rounded text-[#F5C000] bg-slate-800 border-slate-600 focus:ring-0 focus:ring-offset-0 cursor-pointer">
-                      <span class="text-xs font-bold text-white">${w.name}</span>
+                        class="w-3.5 h-3.5 rounded text-[#F5A623] bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-0 cursor-pointer">
+                      <span class="text-xs font-bold text-slate-900 dark:text-white">${w.name}</span>
                     </div>
-                    <span class="text-[11px] text-slate-400 font-mono">${formatCurrency(w.hourly_rate || w.rate)}/h</span>
+                    <span class="text-[10px] text-slate-400 font-mono">${formatCurrency(w.hourly_rate || w.rate)}/h</span>
                   </label>
                 `).join('')}
               </div>
-              <div class="flex items-center justify-between mt-1 text-[11px] text-slate-400 px-1">
-                <span id="manualWorkerCountBadge" class="font-semibold text-slate-300">1 von ${crewWorkers.length} ausgewählt</span>
-                <span class="text-emerald-400 text-[10px]">✓ Mehrfachauswahl aktiv</span>
+              <div class="flex items-center justify-between mt-1 text-[10px] text-slate-400 px-1">
+                <span id="manualWorkerCountBadge" class="font-semibold text-slate-600 dark:text-slate-300">1 von ${crewWorkers.length} ausgewählt</span>
+                <span class="text-emerald-600 dark:text-emerald-400 text-[9px]">✓ Mehrfachauswahl aktiv</span>
               </div>
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Datum</label>
-              <input type="date" name="date" value="${getTodayString()}" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Datum</label>
+              <input type="date" name="date" value="${getTodayString()}" required class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
-            <!-- Rounding Option Toggle (Requirement 2) -->
-            <label class="flex items-center justify-between p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 cursor-pointer">
+            <!-- Rounding Option Toggle -->
+            <label class="flex items-center justify-between p-2 bg-slate-50 dark:bg-[#0e1318] rounded-xl border border-slate-200/80 dark:border-[#1e2733] cursor-pointer">
               <div class="flex items-center gap-2">
-                <span class="text-sm">🕒</span>
+                <span class="text-xs">🕒</span>
                 <div>
-                  <span class="text-xs font-bold text-white block">${t('round_toggle', '30-Minuten-Rundung aktivieren')}</span>
-                  <span class="text-[10px] text-slate-400 block">Rundet Beginn und Ende auf 30-Minuten-Intervalle</span>
+                  <span class="text-xs font-bold text-slate-900 dark:text-white block">${t('round_toggle', '30-Minuten-Rundung aktivieren')}</span>
+                  <span class="text-[9px] text-slate-400 block">Rundet Beginn und Ende auf 30-Minuten</span>
                 </div>
               </div>
-              <input type="checkbox" name="roundTimeToggle" checked onchange="updateManualHoursPreview()" class="w-4 h-4 rounded text-[#F5C000] bg-slate-900 border-slate-600 focus:ring-0 cursor-pointer">
+              <input type="checkbox" name="roundTimeToggle" checked onchange="updateManualHoursPreview()" class="w-3.5 h-3.5 rounded text-[#F5A623] bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-0 cursor-pointer">
             </label>
 
             <div class="grid grid-cols-2 gap-2">
               <div>
-                <label class="text-xs font-semibold text-slate-300 block mb-1">Beginn</label>
+                <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Beginn</label>
                 <input type="time" name="startTime" id="manualStartTime" value="08:00" required 
                   onchange="updateManualHoursPreview();"
-                  class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
+                  class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none font-mono focus:border-[#F5A623]">
               </div>
               <div>
-                <label class="text-xs font-semibold text-slate-300 block mb-1">Ende</label>
+                <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Ende</label>
                 <input type="time" name="endTime" id="manualEndTime" value="16:30" required 
                   onchange="updateManualHoursPreview();"
-                  class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
+                  class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none font-mono focus:border-[#F5A623]">
               </div>
             </div>
 
             <!-- Live Hours Preview -->
-            <div class="bg-slate-800/60 p-2 rounded-xl border border-slate-700 flex items-center justify-between text-xs">
-              <span class="text-slate-400 flex items-center gap-1 text-[11px]">
+            <div class="bg-slate-50 dark:bg-[#0e1318] p-2 rounded-xl border border-slate-200/80 dark:border-[#1e2733] flex items-center justify-between text-xs">
+              <span class="text-slate-500 dark:text-slate-400 flex items-center gap-1 text-[10px]">
                 <span>⏱️</span> <span>Berechnete Arbeitszeit:</span>
               </span>
-              <span id="manualShiftHoursPreview" class="font-bold text-emerald-400 font-mono text-xs">8.0 Std. (08:00 - 16:30)</span>
+              <span id="manualShiftHoursPreview" class="font-bold text-emerald-600 dark:text-emerald-400 font-mono text-xs">8.0 Std. (08:00 - 16:30)</span>
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Pause (Minuten)</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Pause (Minuten)</label>
               <input type="number" name="breakMinutes" id="manualBreakMinutes" value="30" min="0" max="240" step="5"
                 oninput="updateManualHoursPreview()"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Baustelle</label>
-              <input type="text" name="note" placeholder="z.B. Baustelle Neubau" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Notiz / Baustelle</label>
+              <input type="text" name="note" placeholder="z.B. Baustelle Neubau" class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
-            <!-- Media / Photos upload section (Requirement 5) -->
+            <!-- Media / Photos upload section -->
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="text-xs font-semibold text-slate-300">📷 ${t('upload_photos', 'Fotos hinzufügen (Tagesende)')}</label>
-                <span class="text-[10px] text-slate-400 font-mono">${(appState.manualShiftMedia || []).length} Fotos</span>
+                <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">📷 ${t('upload_photos', 'Fotos hinzufügen')}</label>
+                <span class="text-[9px] text-slate-400 font-mono">${(appState.manualShiftMedia || []).length} Fotos</span>
               </div>
               <input type="file" id="manualShiftFileInput" accept="image/*" multiple class="hidden" onchange="handleModalImageUpload(event, 'manualShift')">
-              <button type="button" onclick="document.getElementById('manualShiftFileInput').click()" class="w-full bg-slate-800 hover:bg-slate-750 border border-dashed border-slate-600 text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
+              <button type="button" onclick="document.getElementById('manualShiftFileInput').click()" class="w-full bg-slate-50 dark:bg-[#1a222c] hover:bg-slate-100 dark:hover:bg-[#222d3a] border border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
                 <span>📷</span> <span>+ Fotos auswählen / aufnehmen</span>
               </button>
               ${(appState.manualShiftMedia || []).length > 0 ? `
-                <div class="flex items-center gap-2 mt-2 overflow-x-auto py-1">
+                <div class="flex items-center gap-1.5 mt-2 overflow-x-auto py-1">
                   ${appState.manualShiftMedia.map((img, idx) => `
-                    <div class="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-600 flex-shrink-0 group">
+                    <div class="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 flex-shrink-0 group">
                       <img src="${img}" class="w-full h-full object-cover">
-                      <button type="button" onclick="removeModalImage('manualShift', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[10px] font-bold flex items-center justify-center">✕</button>
+                      <button type="button" onclick="removeModalImage('manualShift', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[9px] font-bold flex items-center justify-center">✕</button>
                     </div>
                   `).join('')}
                 </div>
               ` : ''}
             </div>
 
-            <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
-              <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-              <button type="submit" id="manualShiftSubmitBtn" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2.5 rounded-xl text-xs font-bold shadow-md active-press transition">
+            <div class="pt-2.5 border-t border-slate-100 dark:border-[#212a35] flex justify-end gap-2">
+              <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+              <button type="submit" id="manualShiftSubmitBtn" class="bg-[#F5A623] hover:bg-[#E09618] text-black px-4 py-1.5 rounded-xl text-xs font-bold shadow-sm active-press transition">
                 Schicht erfassen
               </button>
             </div>
@@ -3921,13 +4065,13 @@ function renderModals() {
     const crewWorkers = appData.workers.filter(w => w.role === 'worker');
     if (crewWorkers.length === 0) {
       modalContent = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4 text-center">
-          <div class="text-3xl">💵</div>
-          <h3 class="text-base font-bold text-white">Keine Mitarbeiter vorhanden</h3>
-          <p class="text-xs text-slate-400">Bitte zuerst Mitarbeiter anlegen, bevor Auszahlungen erfasst werden können.</p>
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-3 text-center text-slate-800 dark:text-slate-100">
+          <div class="text-2xl">💵</div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Keine Mitarbeiter vorhanden</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Bitte zuerst Mitarbeiter anlegen.</p>
           <div class="pt-2 flex justify-center gap-2">
-            <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-            <button type="button" onclick="openModal('addUser')" class="bg-[#F5C000] text-black px-4 py-2 rounded-xl text-xs font-bold">+ Mitarbeiter anlegen</button>
+            <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+            <button type="button" onclick="openModal('addUser')" class="bg-[#F5A623] text-black px-4 py-1.5 rounded-xl text-xs font-bold">+ Mitarbeiter anlegen</button>
           </div>
         </div>
       `;
@@ -3939,79 +4083,79 @@ function renderModals() {
       const initialRemaining = Math.max(0, initialFin.workerBalance);
 
       modalContent = `
-        <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
-          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 max-h-[88vh] overflow-y-auto my-auto shadow-2xl text-slate-800 dark:text-slate-100">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
             <div>
-              <h3 class="text-base font-bold text-white">Auszahlung erfassen</h3>
-              <p class="text-[11px] text-slate-400">Lohnzahlung an Mitarbeiter dokumentieren</p>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">Auszahlung erfassen</h3>
+              <p class="text-[10px] text-slate-400">Lohnzahlung an Mitarbeiter dokumentieren</p>
             </div>
-            <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
           </div>
 
-          <form onsubmit="handleSavePayment(event)" class="space-y-3.5">
+          <form onsubmit="handleSavePayment(event)" class="space-y-3">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Mitarbeiter</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Mitarbeiter</label>
               <select name="workerId" id="logPaymentWorkerSelect" required onchange="updateLogPaymentWorkerStats(this.value)"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
                 ${crewWorkers.map(w => `<option value="${w.id}" ${w.id === preselectedWorkerId ? 'selected' : ''}>${w.name} (${formatCurrency(w.hourly_rate || w.rate)}/h)</option>`).join('')}
               </select>
             </div>
 
             <!-- Live Payment Stats Box for Selected Worker -->
-            <div id="logPaymentStatsBox" class="p-3 bg-slate-800/90 border border-slate-700 rounded-2xl space-y-2 text-xs">
+            <div id="logPaymentStatsBox" class="p-2.5 bg-slate-50 dark:bg-[#0e1318] border border-slate-200/80 dark:border-[#1e2733] rounded-2xl space-y-1.5 text-xs">
               <div class="flex items-center justify-between">
-                <span class="text-slate-400">Total Lohnanspruch:</span>
-                <span class="font-bold text-white text-sm" id="payStatsTotal">${formatCurrency(initialFin.workerEarned)} (${initialFin.totalHours.toFixed(1)} Std.)</span>
+                <span class="text-slate-400 text-[11px]">Total Lohnanspruch:</span>
+                <span class="font-bold text-slate-900 dark:text-white text-xs" id="payStatsTotal">${formatCurrency(initialFin.workerEarned)} (${initialFin.totalHours.toFixed(1)} Std.)</span>
               </div>
               <div class="flex items-center justify-between">
-                <span class="text-slate-400">Bereits bezahlt:</span>
-                <span class="font-bold text-blue-400 text-sm" id="payStatsPaid">${formatCurrency(initialFin.totalPaid)}</span>
+                <span class="text-slate-400 text-[11px]">Bereits bezahlt:</span>
+                <span class="font-bold text-blue-600 dark:text-blue-400 text-xs" id="payStatsPaid">${formatCurrency(initialFin.totalPaid)}</span>
               </div>
-              <div class="flex items-center justify-between border-t border-slate-700/70 pt-2">
-                <span class="text-[#F5C000] font-bold">Noch offen (Restbetrag):</span>
-                <span class="${initialRemaining > 0 ? 'font-black text-sm text-emerald-400' : 'font-bold text-sm text-slate-400'}" id="payStatsRemaining">${formatCurrency(initialRemaining)}</span>
+              <div class="flex items-center justify-between border-t border-slate-200/60 dark:border-[#1e2733] pt-1.5">
+                <span class="text-amber-700 dark:text-[#F5A623] font-bold text-[11px]">Noch offen (Restbetrag):</span>
+                <span class="${initialRemaining > 0 ? 'font-black text-xs text-emerald-600 dark:text-emerald-400' : 'font-bold text-xs text-slate-400'}" id="payStatsRemaining">${formatCurrency(initialRemaining)}</span>
               </div>
-              <div class="pt-1">
+              <div class="pt-0.5">
                 <button type="button" onclick="fillPaymentRemainingAmount()" 
-                  class="w-full bg-amber-950/40 hover:bg-amber-900/60 text-[#F5C000] border border-amber-800/60 py-1.5 px-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1.5 active-press">
+                  class="w-full bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-[#F5A623] border border-amber-500/30 py-1 px-2 rounded-xl text-[10px] font-bold transition flex items-center justify-center gap-1 active-press">
                   <span>👉</span> <span>Restbetrag automatisch übernehmen</span>
                 </button>
               </div>
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Auszahlungsbetrag (€)</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Auszahlungsbetrag (€)</label>
               <input type="number" step="0.01" name="amount" id="logPaymentAmountInput" value="${initialRemaining > 0 ? initialRemaining.toFixed(2) : ''}" placeholder="0.00" required
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000] font-mono">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623] font-mono">
             </div>
 
-            <!-- Direct Approval Checkbox (Requirement 8) -->
-            <label class="flex items-center gap-2.5 p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 cursor-pointer">
-              <input type="checkbox" name="markApproved" checked class="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-600 focus:ring-0 cursor-pointer">
+            <!-- Direct Approval Checkbox -->
+            <label class="flex items-center gap-2 p-2 bg-slate-50 dark:bg-[#0e1318] rounded-xl border border-slate-200/80 dark:border-[#1e2733] cursor-pointer">
+              <input type="checkbox" name="markApproved" checked class="w-3.5 h-3.5 rounded text-emerald-600 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-0 cursor-pointer">
               <div>
-                <span class="text-xs font-bold text-white block">${t('mark_approved_directly', 'Direkt als genehmigt buchen (vom Lohn abziehen)')}</span>
-                <span class="text-[10px] text-slate-400 block">Wird sofort vom Restbetrag des Arbeiters abgezogen</span>
+                <span class="text-xs font-bold text-slate-900 dark:text-white block">${t('mark_approved_directly', 'Direkt als genehmigt buchen')}</span>
+                <span class="text-[9px] text-slate-400 block">Wird sofort vom Restbetrag abgezogen</span>
               </div>
             </label>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Empfänger / Bestätigung</label>
-              <input type="text" name="receivedBy" placeholder="Wer hat das Geld entgegengenommen?" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Empfänger</label>
+              <input type="text" name="receivedBy" placeholder="Wer hat das Geld erhalten?" class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Datum</label>
-              <input type="date" name="date" value="${getTodayString()}" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Datum</label>
+              <input type="date" name="date" value="${getTodayString()}" required class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Zahlungsart (Optional)</label>
-              <input type="text" name="comment" placeholder="z.B. Bar bezahlt, Überweisung..." class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Notiz / Zahlungsart (Optional)</label>
+              <input type="text" name="comment" placeholder="z.B. Bar bezahlt, Überweisung..." class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
-            <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
-              <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-              <button type="submit" id="savePaymentSubmitBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow-md active-press transition">
+            <div class="pt-2.5 border-t border-slate-100 dark:border-[#212a35] flex justify-end gap-2">
+              <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+              <button type="submit" id="savePaymentSubmitBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-sm active-press transition">
                 Zahlung buchen
               </button>
             </div>
@@ -4021,100 +4165,100 @@ function renderModals() {
     }
   }
 
-  // 6. Confirm Stop Timer Modal (Requirement 2 & 5)
+  // 6. Confirm Stop Timer Modal
   else if (modal === 'stopTimerConfirm' && appState.modalPayload) {
     const p = appState.modalPayload;
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[88vh] overflow-y-auto my-auto shadow-2xl">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">Schicht beenden</h3>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 max-h-[88vh] overflow-y-auto my-auto shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Schicht beenden</h3>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
         <div class="space-y-3">
-          <div class="bg-slate-800/60 p-3 rounded-2xl border border-slate-700 space-y-1.5">
+          <div class="bg-slate-50 dark:bg-[#0e1318] p-3 rounded-2xl border border-slate-200/80 dark:border-[#1e2733] space-y-1">
             <div class="flex items-center justify-between">
-              <span class="text-xs text-slate-400">Mitarbeiter:</span>
-              <span class="text-white font-bold text-sm">${p.workerName}</span>
+              <span class="text-[11px] text-slate-400">Mitarbeiter:</span>
+              <span class="text-slate-900 dark:text-white font-bold text-xs">${p.workerName}</span>
             </div>
             <div class="flex items-center justify-between">
-              <span class="text-xs text-slate-400">Verstrichene Zeit:</span>
-              <span class="text-emerald-400 font-mono font-bold">${formatElapsedSeconds(p.elapsedSeconds)}</span>
+              <span class="text-[11px] text-slate-400">Verstrichene Zeit:</span>
+              <span class="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs">${formatElapsedSeconds(p.elapsedSeconds)}</span>
             </div>
-            <div class="pt-1 border-t border-slate-700/60 flex items-center justify-between text-[11px]">
-              <span class="text-slate-400">Erfasste Stempelzeiten:</span>
-              <span class="text-slate-300 font-mono">${p.rawStartTime} - ${p.rawEndTime}</span>
+            <div class="pt-1 border-t border-slate-200/60 dark:border-[#1e2733] flex items-center justify-between text-[10px]">
+              <span class="text-slate-400">Stempelzeiten:</span>
+              <span class="text-slate-700 dark:text-slate-300 font-mono">${p.rawStartTime} - ${p.rawEndTime}</span>
             </div>
           </div>
 
-          <!-- Rounding Option Toggle Switch (Requirement 2) -->
-          <label class="flex items-center justify-between p-2.5 bg-slate-800/80 rounded-xl border border-slate-700 cursor-pointer">
+          <!-- Rounding Option Toggle Switch -->
+          <label class="flex items-center justify-between p-2 bg-slate-50 dark:bg-[#0e1318] rounded-xl border border-slate-200/80 dark:border-[#1e2733] cursor-pointer">
             <div class="flex items-center gap-2">
-              <span class="text-sm">🕒</span>
+              <span class="text-xs">🕒</span>
               <div>
-                <span class="text-xs font-bold text-white block">${t('round_toggle', '30-Minuten-Rundung aktivieren')}</span>
-                <span class="text-[10px] text-slate-400 block">${p.roundTime ? 'Rundet Start/Ende auf halbe Stunden' : 'Exakte Minuten verwenden'}</span>
+                <span class="text-xs font-bold text-slate-900 dark:text-white block">${t('round_toggle', '30-Minuten-Rundung aktivieren')}</span>
+                <span class="text-[9px] text-slate-400 block">${p.roundTime ? 'Rundet Start/Ende auf halbe Stunden' : 'Exakte Minuten verwenden'}</span>
               </div>
             </div>
-            <input type="checkbox" ${p.roundTime ? 'checked' : ''} onchange="toggleStopTimerRounding(this.checked)" class="w-4 h-4 rounded text-[#F5C000] bg-slate-900 border-slate-600 focus:ring-0 cursor-pointer">
+            <input type="checkbox" ${p.roundTime ? 'checked' : ''} onchange="toggleStopTimerRounding(this.checked)" class="w-3.5 h-3.5 rounded text-[#F5A623] bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 focus:ring-0 cursor-pointer">
           </label>
 
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Startzeit</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Startzeit</label>
               <input type="time" value="${p.startTime}" 
                 onchange="appState.modalPayload.startTime = this.value; updateStopTimerHours();"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none font-mono focus:border-[#F5A623]">
             </div>
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Endzeit</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Endzeit</label>
               <input type="time" value="${p.endTime}" 
                 onchange="appState.modalPayload.endTime = this.value; updateStopTimerHours();"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none font-mono focus:border-[#F5A623]">
             </div>
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Pause abziehen (Minuten)</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Pause (Minuten)</label>
             <input type="number" value="${p.breakMinutes}" min="0" max="240" step="5"
               oninput="appState.modalPayload.breakMinutes = this.value; updateStopTimerHours();"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-semibold text-slate-300">Geleistete Arbeitszeit</label>
-              <span class="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/40">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Geleistete Arbeitszeit</label>
+              <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                 ${p.roundTime ? '30m Intervall' : 'Exakt'}
               </span>
             </div>
             <input type="number" step="0.5" id="stopTimerHoursInput" value="${p.calculatedHours}" 
               onchange="appState.modalPayload.calculatedHours = parseFloat(this.value) || 0"
-              class="w-full bg-slate-800 border border-slate-700 text-emerald-400 font-bold rounded-xl px-3 py-2 text-base focus:outline-none font-mono">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-emerald-600 dark:text-emerald-400 font-bold rounded-xl px-3 py-1.5 text-sm focus:outline-none font-mono">
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Baustelle</label>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Notiz / Baustelle</label>
             <input type="text" value="${p.note}" onchange="appState.modalPayload.note=this.value"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
-          <!-- Media / Photos upload section (Requirement 5) -->
+          <!-- Media / Photos upload section -->
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-semibold text-slate-300">📷 ${t('upload_photos', 'Fotos hinzufügen (Tagesende)')}</label>
-              <span class="text-[10px] text-slate-400 font-mono">${(p.media || []).length} Fotos</span>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">📷 ${t('upload_photos', 'Fotos hinzufügen')}</label>
+              <span class="text-[9px] text-slate-400 font-mono">${(p.media || []).length} Fotos</span>
             </div>
             <input type="file" id="clockoutMediaFileInput" accept="image/*" multiple class="hidden" onchange="handleModalImageUpload(event, 'stopTimerConfirm')">
-            <button type="button" onclick="document.getElementById('clockoutMediaFileInput').click()" class="w-full bg-slate-800 hover:bg-slate-750 border border-dashed border-slate-600 text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
+            <button type="button" onclick="document.getElementById('clockoutMediaFileInput').click()" class="w-full bg-slate-50 dark:bg-[#1a222c] hover:bg-slate-100 dark:hover:bg-[#222d3a] border border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
               <span>📷</span> <span>+ Fotos auswählen / aufnehmen</span>
             </button>
             ${(p.media || []).length > 0 ? `
-              <div class="flex items-center gap-2 mt-2 overflow-x-auto py-1">
+              <div class="flex items-center gap-1.5 mt-2 overflow-x-auto py-1">
                 ${p.media.map((img, idx) => `
-                  <div class="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-600 flex-shrink-0 group">
+                  <div class="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 flex-shrink-0 group">
                     <img src="${img}" class="w-full h-full object-cover">
-                    <button type="button" onclick="removeModalImage('stopTimerConfirm', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[10px] font-bold flex items-center justify-center">✕</button>
+                    <button type="button" onclick="removeModalImage('stopTimerConfirm', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[9px] font-bold flex items-center justify-center">✕</button>
                   </div>
                 `).join('')}
               </div>
@@ -4122,9 +4266,9 @@ function renderModals() {
           </div>
         </div>
 
-        <div class="pt-3 flex justify-end gap-2">
-          <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-          <button onclick="handleConfirmStopTimer()" id="stopTimerSubmitBtn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold active-press shadow-md transition">
+        <div class="pt-2.5 border-t border-slate-100 dark:border-[#212a35] flex justify-end gap-2">
+          <button onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+          <button onclick="handleConfirmStopTimer()" id="stopTimerSubmitBtn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-1.5 rounded-xl text-xs font-bold active-press shadow-sm transition">
             ${t('stop_and_submit', 'Schicht abschließen & senden')}
           </button>
         </div>
@@ -4132,57 +4276,57 @@ function renderModals() {
     `;
   }
 
-  // 7. Edit Shift Modal (Requirement 1 & Leader Only)
+  // 7. Edit Shift Modal
   else if (modal === 'editShift' && appState.modalPayload) {
     const p = appState.modalPayload;
     const crewWorkers = appData.workers.filter(w => w.role === 'worker');
 
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4 max-h-[90vh] overflow-y-auto">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 max-h-[90vh] overflow-y-auto text-slate-800 dark:text-slate-100 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
           <div>
-            <h3 class="text-base font-bold text-white">✏️ Schicht bearbeiten</h3>
-            <p class="text-[11px] text-slate-400">Nur Leiter können Schichten anpassen oder löschen</p>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">✏️ Schicht bearbeiten</h3>
+            <p class="text-[10px] text-slate-400">Schicht anpassen oder löschen</p>
           </div>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
-        <form onsubmit="handleSaveEditedShift(event)" class="space-y-3.5">
+        <form onsubmit="handleSaveEditedShift(event)" class="space-y-3">
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Mitarbeiter</label>
-            <select name="workerId" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Mitarbeiter</label>
+            <select name="workerId" required class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
               ${crewWorkers.map(w => `<option value="${w.id}" ${w.id === p.workerId ? 'selected' : ''}>${w.name}</option>`).join('')}
             </select>
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Datum</label>
-            <input type="date" name="date" value="${p.date}" required class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#F5C000]">
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Datum</label>
+            <input type="date" name="date" value="${p.date}" required class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Beginn</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Beginn</label>
               <input type="time" name="startTime" id="editStartTime" value="${p.startTime}" required 
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none font-mono focus:border-[#F5A623]">
             </div>
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Ende</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Ende</label>
               <input type="time" name="endTime" id="editEndTime" value="${p.endTime}" required 
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none font-mono focus:border-[#F5C000]">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none font-mono focus:border-[#F5A623]">
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Pause (Min.)</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Pause (Min.)</label>
               <input type="number" name="breakMinutes" id="editBreakMinutes" value="${p.breakMinutes}" min="0" max="240" step="5"
-                class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+                class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
             </div>
 
             <div>
-              <label class="text-xs font-semibold text-slate-300 block mb-1">Status</label>
-              <select name="status" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Status</label>
+              <select name="status" class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
                 <option value="pending" ${p.status === 'pending' ? 'selected' : ''}>🟡 Ausstehend</option>
                 <option value="approved" ${p.status === 'approved' ? 'selected' : ''}>🟢 Genehmigt</option>
                 <option value="rejected" ${p.status === 'rejected' ? 'selected' : ''}>🔴 Abgelehnt</option>
@@ -4191,39 +4335,39 @@ function renderModals() {
           </div>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Notiz / Baustelle</label>
-            <input type="text" name="note" value="${p.note}" class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-sm focus:outline-none">
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Notiz / Baustelle</label>
+            <input type="text" name="note" value="${p.note}" class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623]">
           </div>
 
           <!-- Photos in edit modal -->
           <div>
             <div class="flex items-center justify-between mb-1">
-              <label class="text-xs font-semibold text-slate-300">📷 Fotos (${(p.media || []).length})</label>
+              <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">📷 Fotos (${(p.media || []).length})</label>
             </div>
             <input type="file" id="editShiftFileInput" accept="image/*" multiple class="hidden" onchange="handleModalImageUpload(event, 'editShift')">
-            <button type="button" onclick="document.getElementById('editShiftFileInput').click()" class="w-full bg-slate-800 hover:bg-slate-750 border border-dashed border-slate-600 text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
+            <button type="button" onclick="document.getElementById('editShiftFileInput').click()" class="w-full bg-slate-50 dark:bg-[#1a222c] hover:bg-slate-100 dark:hover:bg-[#222d3a] border border-dashed border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 active-press transition">
               <span>📷</span> <span>+ Fotos hinzufügen / ändern</span>
             </button>
             ${(p.media || []).length > 0 ? `
-              <div class="flex items-center gap-2 mt-2 overflow-x-auto py-1">
+              <div class="flex items-center gap-1.5 mt-2 overflow-x-auto py-1">
                 ${p.media.map((img, idx) => `
-                  <div class="relative w-14 h-14 rounded-lg overflow-hidden border border-slate-600 flex-shrink-0">
+                  <div class="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-600 flex-shrink-0">
                     <img src="${img}" class="w-full h-full object-cover">
-                    <button type="button" onclick="removeModalImage('editShift', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[10px] font-bold flex items-center justify-center">✕</button>
+                    <button type="button" onclick="removeModalImage('editShift', ${idx})" class="absolute top-0 right-0 bg-red-600 text-white w-4 h-4 rounded-bl text-[9px] font-bold flex items-center justify-center">✕</button>
                   </div>
                 `).join('')}
               </div>
             ` : ''}
           </div>
 
-          <div class="pt-3 border-t border-slate-800 flex justify-between gap-2">
-            <button type="button" onclick="handleDeleteShift('${p.id}'); closeModal();" class="bg-red-600/80 hover:bg-red-600 text-white px-3 py-2 rounded-xl text-xs font-bold active-press transition">
+          <div class="pt-2.5 border-t border-slate-100 dark:border-[#212a35] flex justify-between gap-2">
+            <button type="button" onclick="handleDeleteShift('${p.id}'); closeModal();" class="bg-red-500/15 hover:bg-red-500/25 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-xl text-xs font-bold active-press transition border border-red-500/20">
               🗑️ Löschen
             </button>
 
             <div class="flex gap-2">
-              <button type="button" onclick="closeModal()" class="bg-slate-800 text-slate-300 px-3.5 py-2 rounded-xl text-xs font-semibold">Abbrechen</button>
-              <button type="submit" id="editShiftSubmitBtn" class="bg-[#F5C000] hover:bg-[#ffd333] text-black px-4 py-2 rounded-xl text-xs font-bold active-press transition">
+              <button type="button" onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">Abbrechen</button>
+              <button type="submit" id="editShiftSubmitBtn" class="bg-[#F5A623] hover:bg-[#E09618] text-black px-4 py-1.5 rounded-xl text-xs font-bold active-press transition shadow-sm">
                 Speichern
               </button>
             </div>
@@ -4233,7 +4377,7 @@ function renderModals() {
     `;
   }
 
-  // 8. Payment Invoice / Receipt Modal (Requirement 7)
+  // 8. Payment Invoice / Receipt Modal
   else if (modal === 'paymentInvoice' && appState.modalPayload) {
     const paymentId = appState.modalPayload;
     const p = (appData.payments || []).find(x => x.id === paymentId) || (getLocalDb().payments || []).find(x => x.id === paymentId);
@@ -4241,73 +4385,73 @@ function renderModals() {
     const worker = wid ? getWorker(wid) : null;
 
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md animate-slide-up space-y-4 max-h-[92vh] overflow-y-auto">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-md animate-slide-up space-y-3.5 max-h-[92vh] overflow-y-auto text-slate-800 dark:text-slate-100 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
           <div class="flex items-center gap-2">
-            <span class="text-xl">📄</span>
-            <h3 class="text-base font-bold text-white">Zahlungsbeleg & Quittung</h3>
+            <span class="text-lg">📄</span>
+            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Zahlungsbeleg & Quittung</h3>
           </div>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
         </div>
 
         ${!p ? `
-          <div class="p-6 text-center text-slate-400 text-sm">Zahlung nicht gefunden</div>
+          <div class="p-6 text-center text-slate-400 text-xs">Zahlung nicht gefunden</div>
         ` : `
           <!-- Printable Invoice / Receipt Box -->
-          <div class="bg-[#141414] border border-[#2e2e2e] rounded-2xl p-4 space-y-4 shadow-inner text-slate-200">
+          <div class="bg-slate-50 dark:bg-[#11161d] border border-slate-200/90 dark:border-[#212a35] rounded-2xl p-4 space-y-3 shadow-inner text-slate-800 dark:text-slate-200">
             <!-- Header Banner -->
-            <div class="border-b border-[#2a2a2a] pb-3 flex items-start justify-between">
+            <div class="border-b border-slate-200/80 dark:border-[#1e2733] pb-2.5 flex items-start justify-between">
               <div>
-                <div class="text-lg font-black text-white leading-none">alles<span class="text-[#F5C000]">Bau</span></div>
-                <div class="text-[10px] text-slate-400 font-semibold mt-0.5">Bauunternehmen • Lohnverwaltung</div>
+                <div class="text-base font-extrabold text-[#455A64] dark:text-white leading-none">alles<span class="text-[#F5A623]">Bau</span></div>
+                <div class="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">BAUUNTERNEHMEN • LOHNVERWALTUNG</div>
               </div>
               <div class="text-right">
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${p.status === 'approved' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-300 border border-amber-800'}">
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${p.status === 'approved' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30'}">
                   ${p.status === 'approved' ? '🟢 GENEHMIGT' : '🟡 AUSSTEHEND'}
                 </span>
-                <div class="text-[9px] font-mono text-slate-500 mt-1">#AB-PAY-${(p.id || '').replace('p_', '').toUpperCase()}</div>
+                <div class="text-[9px] font-mono text-slate-400 mt-1">#AB-PAY-${(p.id || '').replace('p_', '').toUpperCase().slice(0, 8)}</div>
               </div>
             </div>
 
             <!-- Payee & Payment Info -->
-            <div class="grid grid-cols-2 gap-3 text-xs bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+            <div class="grid grid-cols-2 gap-2 text-xs bg-white dark:bg-[#18202a] p-2.5 rounded-xl border border-slate-200/80 dark:border-[#243140]">
               <div>
-                <span class="text-[10px] uppercase font-bold text-slate-400 block">Empfänger (Arbeitnehmer)</span>
-                <span class="font-bold text-white text-sm block mt-0.5">${worker ? worker.name : (p.receivedBy || 'Mitarbeiter')}</span>
-                <span class="text-[10px] text-slate-400 block">${worker ? `@${worker.username} • ID: ${worker.id}` : ''}</span>
+                <span class="text-[9px] uppercase font-bold text-slate-400 block">Empfänger</span>
+                <span class="font-bold text-slate-900 dark:text-white text-xs block mt-0.5">${worker ? worker.name : (p.receivedBy || 'Mitarbeiter')}</span>
+                <span class="text-[9px] text-slate-400 block">${worker ? `@${worker.username}` : ''}</span>
               </div>
 
               <div>
-                <span class="text-[10px] uppercase font-bold text-slate-400 block">Zahlungsdetails</span>
-                <span class="font-bold text-slate-200 block mt-0.5">${formatDate(p.date)}</span>
-                <span class="text-[10px] text-slate-400 block">Ausgezahlt: ${p.loggedBy || 'AllesBau'}</span>
+                <span class="text-[9px] uppercase font-bold text-slate-400 block">Zahlungsdetails</span>
+                <span class="font-bold text-slate-800 dark:text-slate-200 text-xs block mt-0.5">${formatDate(p.date)}</span>
+                <span class="text-[9px] text-slate-400 block">Ausgezahlt: ${p.loggedBy || 'AllesBau'}</span>
               </div>
             </div>
 
             <!-- Amount Highlight Box -->
-            <div class="bg-gradient-to-r from-amber-950/40 to-slate-900 border border-amber-800/60 rounded-xl p-3.5 text-center">
-              <span class="text-[10px] uppercase font-bold text-amber-300 block">Netto-Auszahlungsbetrag</span>
-              <div class="text-2xl font-black text-[#F5C000] mt-0.5">${formatCurrency(p.amount)}</div>
-              <div class="text-[11px] text-slate-300 mt-1 italic">
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-center">
+              <span class="text-[9px] uppercase font-bold text-amber-800 dark:text-amber-300 block">Netto-Auszahlungsbetrag</span>
+              <div class="text-xl font-extrabold text-amber-700 dark:text-[#F5A623] mt-0.5">${formatCurrency(p.amount)}</div>
+              <div class="text-[10px] text-slate-600 dark:text-slate-300 mt-0.5 italic">
                 ${p.comment ? `Verwendungszweck: "${p.comment}"` : 'Reguläre Lohnabschlagszahlung'}
               </div>
             </div>
 
             <!-- Confirmation Legal Text (German) -->
-            <div class="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400 italic leading-relaxed">
+            <div class="p-2 rounded-xl bg-white dark:bg-[#151b22] border border-slate-200/80 dark:border-[#212a35] text-[9px] text-slate-500 dark:text-slate-400 italic leading-relaxed">
               Hiermit wird bestätigt, dass der oben genannte Auszahlungsbetrag ordnungsgemäß ausgezahlt und vom Empfänger vollständig erhalten wurde. Der Betrag wird mit dem bestehenden Lohnanspruch verrechnet.
             </div>
 
             <!-- Signature Boxes -->
             <div class="grid grid-cols-2 gap-3 pt-2 text-[10px]">
-              <div class="border-t border-slate-600 pt-1.5 text-center">
-                <span class="font-bold text-slate-300 block">AllesBau (Arbeitgeber)</span>
-                <span class="text-slate-500 italic block mt-0.5">Unterschrift / Bestätigung</span>
+              <div class="border-t border-slate-300 dark:border-slate-600 pt-1 text-center">
+                <span class="font-bold text-slate-800 dark:text-slate-300 block text-[10px]">AllesBau (Arbeitgeber)</span>
+                <span class="text-slate-400 italic block text-[9px]">Unterschrift</span>
               </div>
 
-              <div class="border-t border-slate-600 pt-1.5 text-center">
-                <span class="font-bold text-slate-300 block">${worker ? worker.name : (p.receivedBy || 'Arbeitnehmer')}</span>
-                <span class="text-slate-500 italic block mt-0.5">Unterschrift des Empfängers</span>
+              <div class="border-t border-slate-300 dark:border-slate-600 pt-1 text-center">
+                <span class="font-bold text-slate-800 dark:text-slate-300 block text-[10px]">${worker ? worker.name : (p.receivedBy || 'Arbeitnehmer')}</span>
+                <span class="text-slate-400 italic block text-[9px]">Empfänger</span>
               </div>
             </div>
           </div>
@@ -4315,15 +4459,15 @@ function renderModals() {
           <!-- Actions -->
           <div class="pt-2 flex flex-wrap items-center justify-between gap-2">
             <button onclick="downloadPaymentInvoicePdf('${p.id}')" 
-              class="bg-[#F5C000] hover:bg-[#ffd333] text-black font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 active-press shadow-md transition">
+              class="bg-[#F5A623] hover:bg-[#E09618] text-black font-extrabold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 active-press shadow-sm transition">
               <span>📥</span> <span>PDF Herunterladen</span>
             </button>
 
             <div class="flex items-center gap-2">
-              <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold active-press transition flex items-center gap-1">
+              <button onclick="window.print()" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold active-press transition flex items-center gap-1">
                 <span>🖨️</span> <span>Drucken</span>
               </button>
-              <button onclick="closeModal()" class="bg-slate-800 text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold">
+              <button onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-2 rounded-xl text-xs font-semibold">
                 Schließen
               </button>
             </div>
@@ -4333,12 +4477,102 @@ function renderModals() {
     `;
   }
 
-  // 9. Media Viewer / Lightbox Modal (Requirement 5 & 6)
+  // 9. Media Viewer / Lightbox Modal
   else if (modal === 'mediaViewer' && appState.modalPayload) {
     const p = appState.modalPayload;
     const images = Array.isArray(p.images) ? p.images : [];
     const activeIndex = p.activeIndex || 0;
     const currentImg = images[activeIndex] || images[0];
+
+    modalContent = `
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-4 w-full max-w-lg animate-slide-up space-y-3 shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">📷</span>
+            <h3 class="text-xs font-bold text-slate-900 dark:text-white">${p.title || 'Fotos'}</h3>
+            <span class="text-[10px] text-slate-400">(${activeIndex + 1} / ${images.length})</span>
+          </div>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
+        </div>
+
+        ${images.length === 0 ? `
+          <div class="p-6 text-center text-slate-400 text-xs">Keine Fotos vorhanden</div>
+        ` : `
+          <!-- Main Full Photo Display -->
+          <div class="relative w-full max-h-[58vh] flex items-center justify-center bg-black/90 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+            <img src="${currentImg}" class="max-w-full max-h-[56vh] object-contain rounded-xl">
+
+            ${images.length > 1 ? `
+              <button onclick="appState.modalPayload.activeIndex = (appState.modalPayload.activeIndex - 1 + ${images.length}) % ${images.length}; renderApp();"
+                class="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-1.5 rounded-full border border-slate-600 transition">
+                ◀
+              </button>
+              <button onclick="appState.modalPayload.activeIndex = (appState.modalPayload.activeIndex + 1) % ${images.length}; renderApp();"
+                class="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black text-white p-1.5 rounded-full border border-slate-600 transition">
+                ▶
+              </button>
+            ` : ''}
+          </div>
+
+          <!-- Thumbnails Strip -->
+          ${images.length > 1 ? `
+            <div class="flex items-center gap-1.5 overflow-x-auto py-1">
+              ${images.map((img, idx) => `
+                <button type="button" onclick="appState.modalPayload.activeIndex = ${idx}; renderApp();"
+                  class="w-12 h-12 rounded-lg overflow-hidden border-2 flex-shrink-0 transition ${idx === activeIndex ? 'border-[#F5A623] scale-105' : 'border-slate-300 dark:border-slate-700 opacity-60'}">
+                  <img src="${img}" class="w-full h-full object-cover">
+                </button>
+              `).join('')}
+            </div>
+          ` : ''}
+        `}
+
+        <div class="pt-1 flex justify-end">
+          <button onclick="closeModal()" class="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-3.5 py-1.5 rounded-xl text-xs font-semibold">
+            Schließen
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // 10. Server / Backend Config Modal
+  else if (modal === 'serverConfig') {
+    const currentUrl = localStorage.getItem('allesbau_backend_url') || '';
+    modalContent = `
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200/90 dark:border-[#263442] rounded-3xl p-5 sm:p-6 w-full max-w-sm animate-slide-up space-y-3.5 shadow-2xl text-slate-800 dark:text-slate-100">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-[#212a35] pb-2.5">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">⚙️ Cloud / Backend Setup</h3>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 text-sm">✕</button>
+        </div>
+
+        <div class="space-y-3">
+          <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            Verbindung zu deiner <b>PythonAnywhere Backend URL</b> oder <b>Lokale Browser-Datenbank</b>.
+          </p>
+
+          <div>
+            <label class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">Backend Server URL</label>
+            <input type="url" id="customBackendInput" value="${currentUrl}" placeholder="https://username.pythonanywhere.com"
+              class="w-full bg-slate-50 dark:bg-[#1a222c] border border-slate-200 dark:border-[#2c3846] text-slate-900 dark:text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:border-[#F5A623] font-mono">
+            <span class="text-[9px] text-slate-400 mt-1 block">Leer lassen für lokale Browser-Datenbank.</span>
+          </div>
+
+          <div class="pt-1 flex flex-col gap-2">
+            <button onclick="saveBackendConfig()" class="w-full bg-[#F5A623] hover:bg-[#E09618] text-black py-2 rounded-xl text-xs font-bold shadow-sm active-press">
+              Server-Einstellungen speichern
+            </button>
+            <button onclick="useLocalModeConfig()" class="w-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700">
+              Lokale Datenbank nutzen
+            </button>
+            <button onclick="handleClearAllData()" class="w-full bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-700 dark:text-red-300 py-2 rounded-xl text-xs font-semibold border border-red-200 dark:border-red-900/40">
+              🗑️ Alle Daten löschen (Reset)
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
     modalContent = `
       <div class="bg-black/95 border border-slate-700 rounded-3xl p-4 w-full max-w-lg animate-slide-up space-y-3">
@@ -4375,7 +4609,7 @@ function renderModals() {
             <div class="flex items-center gap-2 overflow-x-auto py-1">
               ${images.map((img, idx) => `
                 <button type="button" onclick="appState.modalPayload.activeIndex = ${idx}; renderApp();"
-                  class="w-14 h-14 rounded-lg overflow-hidden border-2 flex-shrink-0 transition ${idx === activeIndex ? 'border-[#F5C000] scale-105' : 'border-slate-700 opacity-60'}">
+                  class="w-14 h-14 rounded-xl overflow-hidden border-2 flex-shrink-0 transition ${idx === activeIndex ? 'border-[#F5A623] scale-105 shadow-sm' : 'border-slate-300 dark:border-slate-700 opacity-60'}">
                   <img src="${img}" class="w-full h-full object-cover">
                 </button>
               `).join('')}
@@ -4384,7 +4618,7 @@ function renderModals() {
         `}
 
         <div class="pt-2 flex justify-end">
-          <button onclick="closeModal()" class="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl text-xs font-semibold">
+          <button onclick="closeModal()" class="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-xl text-xs font-semibold">
             Schließen
           </button>
         </div>
@@ -4396,32 +4630,32 @@ function renderModals() {
   else if (modal === 'serverConfig') {
     const currentUrl = localStorage.getItem('allesbau_backend_url') || '';
     modalContent = `
-      <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 class="text-base font-bold text-white">⚙️ Cloud / Backend Setup</h3>
-          <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1">✕</button>
+      <div class="bg-white dark:bg-[#151b22] border border-slate-200 dark:border-[#212a35] text-slate-900 dark:text-slate-100 rounded-3xl p-6 w-full max-w-sm animate-slide-up space-y-4 shadow-xl">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">⚙️ Cloud / Backend Setup</h3>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1">✕</button>
         </div>
 
         <div class="space-y-3">
-          <p class="text-xs text-slate-300 leading-relaxed">
+          <p class="text-xs text-slate-500 dark:text-slate-300 leading-relaxed">
             Wähle zwischen <b>Lokaler Browser-Datenbank</b> (sofort einsatzbereit ohne Installation) oder Verbindung zu deinem <b>PythonAnywhere Backend</b>.
           </p>
 
           <div>
-            <label class="text-xs font-semibold text-slate-300 block mb-1">Backend URL (optional)</label>
+            <label class="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">Backend URL (optional)</label>
             <input type="url" id="customBackendInput" value="${currentUrl}" placeholder="https://username.pythonanywhere.com"
-              class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-amber-400 font-mono">
+              class="w-full bg-slate-50 dark:bg-[#0c1015] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#F5A623] font-mono">
             <span class="text-[10px] text-slate-400 mt-1 block">Leer lassen für lokale Browser-Datenbank.</span>
           </div>
 
           <div class="pt-2 flex flex-col gap-2">
-            <button onclick="saveBackendConfig()" class="w-full bg-[#F5C000] hover:bg-[#ffd333] text-black py-2.5 rounded-xl text-xs font-bold shadow-md active-press">
+            <button onclick="saveBackendConfig()" class="w-full bg-[#F5A623] hover:bg-[#E09618] text-white py-2.5 rounded-xl text-xs font-bold shadow-sm active-press">
               Server-Einstellungen speichern
             </button>
-            <button onclick="useLocalModeConfig()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl text-xs font-semibold border border-slate-700">
+            <button onclick="useLocalModeConfig()" class="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 py-2.5 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700">
               Lokale Datenbank nutzen
             </button>
-            <button onclick="handleClearAllData()" class="w-full bg-red-950/40 hover:bg-red-900/60 text-red-300 py-2.5 rounded-xl text-xs font-semibold border border-red-800/40">
+            <button onclick="handleClearAllData()" class="w-full bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 py-2.5 rounded-xl text-xs font-semibold border border-red-200 dark:border-red-800/40">
               🗑️ Alle Daten löschen (Datenbank zurücksetzen)
             </button>
           </div>
@@ -4633,7 +4867,7 @@ function renderApp() {
   let bodyContent = appState.activeTab === 'home' ? renderHome() : appState.activeTab === 'calendar' ? renderCalendar() : renderPayments();
 
   root.innerHTML = `
-    <div class="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-24">
+    <div class="min-h-screen bg-slate-50 dark:bg-[#0c1015] text-slate-900 dark:text-slate-100 flex flex-col font-sans pb-24 transition-colors duration-200">
       ${renderHeader()}
       <main class="flex-1 p-4 max-w-[480px] w-full mx-auto">
         ${bodyContent}

@@ -1,5 +1,25 @@
 /* Custom Styles & Mobile Enhancements for AllesBau PWA */
 
+:root {
+  --brand-amber: #F5A623;
+  --brand-amber-hover: #E09618;
+  --brand-slate: #455A64;
+  --brand-slate-dark: #37474F;
+  --bg-page: #f8fafc;
+  --bg-card: #ffffff;
+  --border-subtle: #e2e8f0;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+}
+
+html.dark {
+  --bg-page: #0c1015;
+  --bg-card: #151b22;
+  --border-subtle: #212a35;
+  --text-main: #f1f5f9;
+  --text-muted: #94a3b8;
+}
+
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
@@ -9,8 +29,8 @@
 
 /* Custom Scrollbar for smooth mobile look */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -25,7 +45,7 @@
 
 /* Safe area padding for notch & home indicator */
 .safe-top {
-  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-top: max(0.75rem, env(safe-area-inset-top));
 }
 .safe-bottom {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
@@ -38,15 +58,15 @@
 @keyframes pulse-ring {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
   }
 }
 
@@ -56,7 +76,7 @@
 
 /* Card hover & active feedback */
 .active-press {
-  transition: transform 0.1s ease, background-color 0.15s ease;
+  transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 .active-press:active {
   transform: scale(0.97);
@@ -64,31 +84,48 @@
 
 /* Glassmorphism backdrop filter */
 .glass-nav {
-  background: rgba(17, 17, 17, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.dark .glass-nav {
+  background: rgba(16, 21, 28, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Glass header */
+.glass-header {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.dark .glass-header {
+  background: rgba(14, 18, 24, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 /* Modal slide up animation */
 @keyframes slideUp {
   from {
-    transform: translateY(100%);
+    transform: translateY(40px) scale(0.97);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
 .animate-slide-up {
-  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Toast animation */
 @keyframes toastIn {
   from {
-    transform: translateY(-20px) scale(0.9);
+    transform: translateY(-20px) scale(0.94);
     opacity: 0;
   }
   to {
@@ -98,5 +135,5 @@
 }
 
 .animate-toast {
-  animation: toastIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

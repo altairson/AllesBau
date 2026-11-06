@@ -7,7 +7,7 @@
 
   <!-- PWA Meta Tags -->
   <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="#0c1015">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AllesBau">
@@ -15,8 +15,20 @@
   <meta name="description" content="Mobile-first Arbeitszeiterfassung, Live-Schichterfassung und Lohnverwaltung für AllesBau Bauunternehmen.">
 
   <!-- Favicon / Touch Icon — AllesBau Logo -->
-  <link rel="icon" type="image/png" href="./icon.png">
+  <link rel="icon" type="image/png" href="./icon.svg">
   <link rel="apple-touch-icon" href="./icon.png">
+
+  <!-- Instant Theme Initializer (prevents theme flicker) -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('allesbau_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    })();
+  </script>
 
   <!-- jsPDF & AutoTable for 1-Page Monthly PDF Report Generation -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -34,18 +46,26 @@
               50:  '#fffbeb',
               100: '#fef3c7',
               200: '#fde68a',
+              300: '#fcd34d',
               400: '#fbbf24',
-              500: '#F5C000',
-              600: '#d4a000',
-              700: '#a37800',
-              900: '#1a1100',
+              500: '#F5A623', // Matches new logo Bau & Hammer
+              600: '#E09618',
+              700: '#B87508',
+              800: '#925B06',
+              900: '#6E4204',
             },
-            dark: {
-              950: '#0d0d0d',
-              900: '#111111',
-              800: '#1a1a1a',
-              700: '#242424',
-              600: '#2e2e2e',
+            slatebrand: {
+              50:  '#f8fafc',
+              100: '#f1f5f9',
+              200: '#e2e8f0',
+              300: '#cbd5e1',
+              400: '#94a3b8',
+              500: '#64748b',
+              600: '#455A64', // Matches new logo "alles" & lower roof
+              700: '#37474F',
+              800: '#263238',
+              900: '#1A2228',
+              950: '#0F151A',
             }
           }
         }
@@ -56,7 +76,7 @@
   <!-- Custom Styles -->
   <link rel="stylesheet" href="./styles.css">
 </head>
-<body class="bg-[#0d0d0d] text-slate-100 antialiased selection:bg-brand-500 selection:text-black min-h-screen">
+<body class="bg-slate-50 dark:bg-[#0c1015] text-slate-800 dark:text-slate-100 antialiased selection:bg-brand-500 selection:text-black min-h-screen transition-colors duration-200">
   
   <!-- Toast Container -->
   <div id="toast-container" class="fixed top-3 left-1/2 -translate-x-1/2 w-full max-w-[460px] px-4 z-50 pointer-events-none flex flex-col gap-2"></div>
